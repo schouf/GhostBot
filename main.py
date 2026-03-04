@@ -13,6 +13,7 @@ from google.genai import types
 from moviepy.editor import *
 from moviepy.video.fx.all import colorx
 from moviepy.audio.fx.all import audio_loop
+from faster_whisper import WhisperModel
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -28,8 +29,6 @@ YOUTUBE_TOKEN_VAL = os.environ["YOUTUBE_TOKEN_JSON"]
 if not hasattr(PIL.Image, "ANTIALIAS"):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 
-# ================== SFX MAP ================== #
-# Kept intact, but for True Crime, consider changing files to things like "camera_click.mp3", "police_siren.mp3", or "tape_recorder.mp3" later.
 SFX_MAP = {
     "knock": "knock.mp3",
     "bang": "knock.mp3",
@@ -74,10 +73,10 @@ You are an elite viral YouTube Shorts True Crime writer.
 TOPIC: {niche}
 
 STRICT RULES:
-1. THE HOOK: The first line MUST be under 3 seconds and drop a massive, shocking fact immediately. (e.g. "He lived in her walls for six months before she noticed.")
-2. THE LOOP: The script MUST end unresolved in a way that grammatically flows perfectly back into the first line. (e.g., Last line: "And the most terrifying part of it all is..." -> First line: "He lived in her walls...")
+1. THE HOOK: The first line MUST be under 3 seconds and drop a massive, shocking fact immediately.
+2. THE LOOP: The script MUST end unresolved in a way that grammatically flows perfectly back into the first line.
 3. PACING: Break the script into short, punchy, fast-paced lines. Keep tension high.
-4. TONE: Serious, investigative, grim, and highly suspenseful. No fictional horror, keep it grounded in gritty reality.
+4. TONE: Serious, investigative, grim, and highly suspenseful. No fictional horror.
 5. EMOTIONS: Assign realistic narrator emotions per line (e.g., "urgent", "grim", "disbelief", "whisper", "authoritative").
 
 Return ONLY valid JSON in this format:
@@ -105,38 +104,17 @@ Return ONLY valid JSON in this format:
     for model in models_to_try:
         try:
             print(f"Trying {model}...")
-            response = client.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=config
-            )
-
-            if not response.text:
-                continue
-
-            data = json.loads(response.text)
-
-            if "lines" in data and len(data["lines"]) > 0:
-                print(f"✅ Script generated with {model}")
-                return data
-
+            response = client.models.generate_content(model=model, contents=prompt, config=config)
+            if response.text:
+                data = json.loads(response.text)
+                if "lines" in data and len(data["lines"]) > 0:
+                    print(f"✅ Script generated with {model}")
+                    return data
         except Exception as e:
             print(f"❌ Model error ({model}): {e}")
             continue
 
-    print("⚠️ All AI models failed — using fallback script")
-    return {
-        "title": "The Man Who Didn't Exist #shorts #truecrime",
-        "description": "How did he vanish completely?",
-        "tags": ["truecrime", "shorts", "mystery"],
-        "recommended_voice_model": "Qwen-Standard-Storyteller",
-        "lines": [
-            {"emotion": "urgent", "text": "He walked into a room with no exits and was never seen again.", "visual_keyword": "dark empty room"},
-            {"emotion": "grim", "text": "Police searched for months.", "visual_keyword": "police searching"},
-            {"emotion": "whisper", "text": "But what they found...", "visual_keyword": "evidence folder"},
-            {"emotion": "urgent", "text": "proves that", "visual_keyword": "shadowy figure"}
-        ]
-    }
+    return None
 
 # ================== SFX ================== #
 
@@ -147,7 +125,6 @@ def add_sfx(audio_clip, text):
             path = os.path.join("sfx", v)
             if os.path.exists(path):
                 try:
-                    # Lowered SFX volume slightly for True Crime so it doesn't distract from the narration
                     sfx = AudioFileClip(path).volumex(0.20) 
                     if sfx.duration > audio_clip.duration:
                         sfx = sfx.subclip(0, audio_clip.duration)
@@ -189,6 +166,40 @@ def get_visual_clip(keyword, filename, duration):
         pass
     return ColorClip(size=(1080, 1920), color=(15, 15, 15), duration=duration)
 
+# ================== SUBTITLES ================== #
+
+def add_dynamic_subtitles(video_clip, audio_path):
+    print("📝 Transcribing audio for word-level subtitles...")
+    model = WhisperModel("base", device="cpu", compute_type="int8")
+    segments, _ = model.transcribe(audio_path, word_timestamps=True)
+
+    subtitle_clips = []
+    
+    for segment in segments:
+        for word in segment.words:
+            clean_word = word.word.strip().upper()
+            if not clean_word:
+                continue
+
+            try:
+                txt_clip = TextClip(
+                    clean_word,
+                    fontsize=90,
+                    color='yellow',
+                    stroke_color='black',
+                    stroke_width=3,
+                    font='Impact',
+                    method='caption',
+                    size=(video_clip.w * 0.9, None)
+                ).set_start(word.start).set_end(word.end).set_position(('center', video_clip.h * 0.65))
+                
+                subtitle_clips.append(txt_clip)
+            except Exception as e:
+                print(f"⚠️ Failed to generate text clip for '{clean_word}': {e}")
+
+    print(f"✅ Generated {len(subtitle_clips)} word captions!")
+    return CompositeVideoClip([video_clip] + subtitle_clips)
+
 # ================== MAIN PIPELINE ================== #
 
 def main_pipeline():
@@ -201,6 +212,9 @@ def main_pipeline():
         return None, None
 
     script = generate_viral_script()
+    if not script:
+        return None, None
+        
     print(f"🎬 Title: {script['title']}")
     
     final_clips = []
@@ -208,9 +222,7 @@ def main_pipeline():
     for i, line in enumerate(script["lines"]):
         try:
             wav_file = voice_engine.generate_acting_line(
-                line["text"],
-                i,
-                emotion=line.get("emotion", "serious")
+                line["text"], i, emotion=line.get("emotion", "serious")
             )
 
             if not wav_file:
@@ -224,7 +236,6 @@ def main_pipeline():
 
             clip = clip.fx(colorx, 0.85).set_audio(audio_clip)
 
-            # High Retention Post-Processing: Hard cuts and fast flashes
             if i > 0:
                 if random.random() < 0.2:
                     clip = clip.fadein(0.1, color=[255,255,255]) 
@@ -243,13 +254,21 @@ def main_pipeline():
     print("✂️ Rendering Final Video with Transitions...")
     final_video = CompositeVideoClip(final_clips)
 
+    # --- ADD SUBTITLES ---
+    temp_voice_track = "temp_master_voice.wav"
+    final_video.audio.write_audiofile(temp_voice_track, fps=24000, logger=None)
+    
+    final_video = add_dynamic_subtitles(final_video, temp_voice_track)
+    
+    if os.path.exists(temp_voice_track):
+        os.remove(temp_voice_track)
+
     # --- ADD BACKGROUND MUSIC ---
     print("🎵 Adding Background Music...")
     music_files = glob.glob("music/track*.mp3")
     
     if music_files:
         chosen_track = random.choice(music_files)
-        print(f"Selected BG Music: {chosen_track}")
         try:
             bg_music = AudioFileClip(chosen_track).volumex(0.08)
             bg_music = audio_loop(bg_music, duration=final_video.duration)
@@ -263,7 +282,44 @@ def main_pipeline():
         output_file,
         codec="libx264",
         audio_codec="aac",
-        fps=24,
-        preset="fast"
+        fps=30,
+        preset="fast",
+        threads=4 # Speeds up rendering on GitHub Actions
     )
-    return output
+    return output_file, script
+
+# ================== YOUTUBE UPLOAD ================== #
+
+def upload_to_youtube(file_path, metadata):
+    if not file_path:
+        return
+    print("🚀 Uploading to YouTube...")
+    try:
+        creds = Credentials.from_authorized_user_info(json.loads(YOUTUBE_TOKEN_VAL))
+        youtube = build("youtube", "v3", credentials=creds)
+        youtube.videos().insert(
+            part="snippet,status",
+            body={
+                "snippet": {
+                    "title": metadata["title"],
+                    "description": metadata["description"],
+                    "tags": metadata["tags"],
+                    "categoryId": "24"
+                },
+                "status": {
+                    "privacyStatus": "public",
+                    "selfDeclaredMadeForKids": False
+                }
+            },
+            media_body=MediaFileUpload(file_path, chunksize=-1, resumable=True)
+        ).execute()
+        print("✅ Upload Successful")
+    except Exception as e:
+        print(f"❌ Upload failed: {e}")
+
+# ================== ENTRY ================== #
+
+if __name__ == "__main__":
+    video_path, metadata = main_pipeline()
+    if video_path and metadata:
+        upload_to_youtube(video_path, metadata)
