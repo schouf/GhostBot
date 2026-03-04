@@ -10,3 +10,4 @@ requests
 torch
 soundfile
 qwen-tts
+faster-whisper
