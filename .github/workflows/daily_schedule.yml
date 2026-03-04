@@ -22,10 +22,13 @@ jobs:
           python-version: '3.11'
 
       - name: Install System Dependencies
-        # Installs ffmpeg for video, sndfile for audio, and sox for pydub
+        # Installs ffmpeg for video, sndfile for audio, sox for pydub, 
+        # PLUS ImageMagick and fonts for MoviePy TextClips
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg libsndfile1 sox
+          sudo apt-get install -y ffmpeg libsndfile1 sox imagemagick fonts-liberation
+          # Fix Ubuntu's ImageMagick security policy that blocks text rendering
+          sudo sed -i 's/<policy domain="path" rights="none" pattern="@\*"//' /etc/ImageMagick-6/policy.xml
 
       - name: Install Python Libraries
         run: |
