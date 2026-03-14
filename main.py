@@ -54,7 +54,7 @@ def anti_ban_sleep():
 # ================== SCRIPT GENERATION ================== #
 
 def generate_viral_script():
-    print("🧠 Generating High Retention True Crime Script...")
+    print("🧠 Generating SSML-Engineered True Crime Script...")
 
     client = genai.Client(api_key=GEMINI_KEY)
     models_to_try = ["models/gemini-2.5-pro", "models/gemini-2.5-flash"]
@@ -68,25 +68,36 @@ def generate_viral_script():
     ])
 
     prompt = f"""
-You are an elite viral YouTube Shorts True Crime writer.
+You are an elite viral YouTube Shorts True Crime writer and an expert in Audio SSML (Speech Synthesis Markup Language).
 
 TOPIC: {niche}
 
 STRICT RULES:
-1. THE HOOK: The first line MUST be under 3 seconds and drop a massive, shocking fact immediately.
-2. THE LOOP: The script MUST end unresolved in a way that grammatically flows perfectly back into the first line.
-3. PACING: Break the script into short, punchy, fast-paced lines. Keep tension high.
-4. TONE: Serious, investigative, grim, and highly suspenseful. No fictional horror.
-5. VISUAL KEYWORDS: You MUST invent highly specific, unique visual keywords for EVERY line (e.g., "muddy footprints on carpet", "rusty abandoned car in woods", "flickering motel neon sign"). DO NOT use generic words like "dark room" or "police tape".
+1. THE HOOK: First line MUST be under 3 seconds and drop a massive, shocking fact immediately.
+2. THE LOOP: The script MUST end unresolved, grammatically flowing perfectly back into the first line.
+3. PACING & SSML: You must write the text using SSML tags to guide the AI voice actor. 
+   - Use <break time="500ms"/> for suspenseful dramatic pauses.
+   - Use <emphasis level="strong">word</emphasis> for shocking details.
+   - Use <prosody rate="slow">phrase</prosody> to build tension.
+   - Do NOT wrap the entire text in <speak> tags. I will do that.
+4. CASTING: Choose ONE specific voice model from this list to host the entire video:
+   - "en-US-Studio-Q" (Deep, intense male narrator)
+   - "en-US-Studio-O" (Authoritative, serious female narrator)
+   - "en-GB-Studio-B" (Gritty British male investigator)
+   - "en-US-Journey-D" (Deep, cinematic male storyteller)
+   - "en-US-Journey-F" (Engaging, suspenseful female storyteller)
+5. VISUAL KEYWORDS: Invent highly specific, unique visual keywords for EVERY line (e.g., "muddy footprints on carpet", "rusty abandoned car in woods").
 
 Return ONLY valid JSON in this format:
 {{
   "title": "High curiosity viral title #shorts #truecrime",
   "description": "Curiosity driven description.",
   "tags": ["truecrime", "mystery", "shorts", "unsolved"],
+  "recommended_voice_model": "en-US-Studio-Q",
   "lines": [
     {{
-      "text": "Hook line goes here.",
+      "ssml_text": "He walked into the room... <break time='800ms'/> and vanished.",
+      "clean_text": "He walked into the room... and vanished.",
       "visual_keyword": "muddy footprints on carpet"
     }}
   ]
@@ -137,7 +148,6 @@ def get_visual_clip(keyword, filename, duration):
     headers = {"Authorization": PEXELS_KEY}
     url = "https://api.pexels.com/videos/search"
     
-    # Randomize the page and fetch more options to ensure fresh visuals
     params = {
         "query": f"{keyword} cinematic dark", 
         "per_page": 15, 
@@ -150,9 +160,7 @@ def get_visual_clip(keyword, filename, duration):
         data = r.json()
         
         if data.get("videos"):
-            # Pick a RANDOM video from the fetched pool, preventing repetition
             chosen_video = random.choice(data["videos"])
-            
             best_file = max(chosen_video["video_files"], key=lambda x: x["width"] * x["height"])
             link = best_file["link"]
             
@@ -226,19 +234,29 @@ def main_pipeline():
         
     print(f"🎬 Title: {script['title']}")
     
+    # Extract the chosen voice model for this specific video
+    target_voice = script.get("recommended_voice_model", "en-US-Studio-Q")
+    print(f"🎙️ AI Casted Narrator: {target_voice}")
+    
     final_clips = []
 
     for i, line in enumerate(script["lines"]):
         try:
+            # We pass both the SSML for the engine, and the clean_text for the SFX matcher
+            ssml_input = line.get("ssml_text", line.get("text"))
+            clean_text = line.get("clean_text", line.get("text", ""))
+
             wav_file = voice_engine.generate_acting_line(
-                line["text"], i
+                ssml_text=ssml_input, 
+                index=i, 
+                voice_name=target_voice
             )
 
             if not wav_file:
                 continue
 
             audio_clip = AudioFileClip(wav_file)
-            audio_clip = add_sfx(audio_clip, line["text"])
+            audio_clip = add_sfx(audio_clip, clean_text)
 
             video_file = f"temp_vid_{i}.mp4"
             clip = get_visual_clip(line["visual_keyword"], video_file, audio_clip.duration)
@@ -293,7 +311,7 @@ def main_pipeline():
         audio_codec="aac",
         fps=30,
         preset="fast",
-        threads=4 # Speeds up rendering on GitHub Actions
+        threads=4 
     )
     return output_file, script
 
