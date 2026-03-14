@@ -5,9 +5,8 @@ from pydub.effects import compress_dynamic_range, normalize
 
 class VoiceEngine:
     def __init__(self):
-        print("🎚️ Initializing Google Cloud True Crime Voice Engine...")
+        print("🎚️ Initializing Dynamic Google Cloud Voice Engine...")
         
-        # We must initialize the client using the API key passed from GitHub Secrets
         api_key = os.environ.get("GOOGLE_TTS_API_KEY")
         if not api_key:
             raise ValueError("GOOGLE_TTS_API_KEY environment variable not set.")
@@ -15,44 +14,41 @@ class VoiceEngine:
         self.client = texttospeech.TextToSpeechClient(
             client_options={"api_key": api_key}
         )
-
-        # "Journey" voices are Google's highest tier for realistic narration.
-        # en-US-Journey-D is a deep, resonant male voice perfect for True Crime.
-        self.voice = texttospeech.VoiceSelectionParams(
-            language_code="en-US",
-            name="en-US-Journey-D"
-        )
         
-        # REMOVED pitch and speaking_rate because Journey voices do not support them.
+        # AudioConfig is kept clean. We let the SSML dictate the pacing and pitch.
         self.audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.LINEAR16
         )
 
     def _podcast_mastering(self, sound):
-        """Applies light mastering since Google Journey voices are already high quality."""
-        # 1. Very slight bass boost
-        sound = sound.low_pass_filter(10000) 
+        """Applies true crime EQ. Relies purely on SSML for pacing/pauses."""
+        # Darker EQ: Cut off high frequencies to keep it bass-heavy
+        sound = sound.low_pass_filter(8000) 
         
-        # 2. Light Compression to keep volume consistent
-        sound = compress_dynamic_range(sound, threshold=-15.0, ratio=4.0, attack=5.0, release=50.0)
+        # Aggressive Compression: Keeps whispers and loud tones at the same volume
+        sound = compress_dynamic_range(sound, threshold=-15.0, ratio=5.0, attack=5.0, release=50.0)
         
-        # 3. Maximize Volume
+        # Maximize Volume
         sound = normalize(sound, headroom=0.1)
-        
-        # 4. Snappy pacing: Trim dead air faster so the cuts feel more urgent
-        sound = sound.strip_silence(silence_len=100, silence_thresh=-45, padding=40)
 
         return sound
 
-    def generate_acting_line(self, text, index, emotion="serious"):
+    def generate_acting_line(self, ssml_text, index, voice_name="en-US-Studio-Q"):
         filename = f"temp_voice_{index}.wav"
-        print(f"🎙️ Generating Google TTS: '{text}'")
-
+        
         try:
-            synthesis_input = texttospeech.SynthesisInput(text=text)
+            # Dynamically set the voice based on Gemini's casting choice
+            voice = texttospeech.VoiceSelectionParams(
+                language_code=voice_name[:5], # Extracts 'en-US' or 'en-GB' from the model name
+                name=voice_name
+            )
+
+            # Properly wrap the LLM's raw SSML in standard speak tags
+            formatted_ssml = f"<speak>{ssml_text}</speak>"
+            synthesis_input = texttospeech.SynthesisInput(ssml=formatted_ssml)
 
             response = self.client.synthesize_speech(
-                input=synthesis_input, voice=self.voice, audio_config=self.audio_config
+                input=synthesis_input, voice=voice, audio_config=self.audio_config
             )
 
             temp_raw = f"temp_raw_{index}.wav"
@@ -60,8 +56,6 @@ class VoiceEngine:
                 out.write(response.audio_content)
 
             sound = AudioSegment.from_file(temp_raw)
-
-            # Master the audio
             sound = self._podcast_mastering(sound)
             sound.export(filename, format="wav")
 
@@ -71,5 +65,5 @@ class VoiceEngine:
             return filename
 
         except Exception as e:
-            print(f"⚠️ Google TTS Generation Failed: {e}")
+            print(f"⚠️ Google TTS Generation Failed for {voice_name}: {e}")
             return None
