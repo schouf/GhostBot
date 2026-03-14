@@ -54,7 +54,7 @@ def anti_ban_sleep():
 # ================== SCRIPT GENERATION ================== #
 
 def generate_viral_script():
-    print("🧠 Generating SSML-Engineered True Crime Script...")
+    print("🧠 Generating Screenplay-Engineered True Crime Script...")
 
     client = genai.Client(api_key=GEMINI_KEY)
     models_to_try = ["models/gemini-2.5-pro", "models/gemini-2.5-flash"]
@@ -68,24 +68,22 @@ def generate_viral_script():
     ])
 
     prompt = f"""
-You are an elite viral YouTube Shorts True Crime writer and an expert in Audio SSML (Speech Synthesis Markup Language).
+You are an elite viral YouTube Shorts True Crime writer and an expert Voice Director.
 
 TOPIC: {niche}
 
 STRICT RULES:
 1. THE HOOK: First line MUST be under 3 seconds and drop a massive, shocking fact immediately.
 2. THE LOOP: The script MUST end unresolved, grammatically flowing perfectly back into the first line.
-3. PACING & SSML: You must write the text using SSML tags to guide the AI voice actor. 
-   - Use <break time="500ms"/> for suspenseful dramatic pauses.
-   - Use <emphasis level="strong">word</emphasis> for shocking details.
-   - Use <prosody rate="slow">phrase</prosody> to build tension.
-   - Do NOT wrap the entire text in <speak> tags. I will do that.
+3. PACING & STAGE DIRECTIONS: Guide the AI voice actor using text formatting. 
+   - Use ellipses (...) for suspenseful dramatic pauses.
+   - Use ALL CAPS for shocking, emphasized words.
+   - Use bracketed stage directions like [whispering], [takes a deep breath], or [voice trembling] to dictate emotion.
 4. CASTING: Choose ONE specific voice model from this list to host the entire video:
-   - "en-US-Studio-Q" (Deep, intense male narrator)
-   - "en-US-Studio-O" (Authoritative, serious female narrator)
-   - "en-GB-Studio-B" (Gritty British male investigator)
-   - "en-US-Journey-D" (Deep, cinematic male storyteller)
-   - "en-US-Journey-F" (Engaging, suspenseful female storyteller)
+   - "Charon" (Deep, gritty male)
+   - "Fenrir" (Intense, heavy male)
+   - "Aoede" (Serious, investigative female)
+   - "Kore" (Calm, suspenseful female)
 5. VISUAL KEYWORDS: Invent highly specific, unique visual keywords for EVERY line (e.g., "muddy footprints on carpet", "rusty abandoned car in woods").
 
 Return ONLY valid JSON in this format:
@@ -93,11 +91,11 @@ Return ONLY valid JSON in this format:
   "title": "High curiosity viral title #shorts #truecrime",
   "description": "Curiosity driven description.",
   "tags": ["truecrime", "mystery", "shorts", "unsolved"],
-  "recommended_voice_model": "en-US-Studio-Q",
+  "recommended_voice_model": "Charon",
   "lines": [
     {{
-      "ssml_text": "He walked into the room... <break time='800ms'/> and vanished.",
-      "clean_text": "He walked into the room... and vanished.",
+      "acting_text": "[takes a deep breath] He walked into the room... and VANISHED.",
+      "clean_text": "He walked into the room and vanished.",
       "visual_keyword": "muddy footprints on carpet"
     }}
   ]
@@ -234,20 +232,20 @@ def main_pipeline():
         
     print(f"🎬 Title: {script['title']}")
     
-    # Extract the chosen voice model for this specific video
-    target_voice = script.get("recommended_voice_model", "en-US-Studio-Q")
+    # Dynamically extract Gemini's casting choice
+    target_voice = script.get("recommended_voice_model", "Charon")
     print(f"🎙️ AI Casted Narrator: {target_voice}")
     
     final_clips = []
 
     for i, line in enumerate(script["lines"]):
         try:
-            # We pass both the SSML for the engine, and the clean_text for the SFX matcher
-            ssml_input = line.get("ssml_text", line.get("text"))
+            # Send the acting text to the voice model, and clean text to the SFX model
+            acting_input = line.get("acting_text", line.get("text"))
             clean_text = line.get("clean_text", line.get("text", ""))
 
             wav_file = voice_engine.generate_acting_line(
-                ssml_text=ssml_input, 
+                acting_text=acting_input, 
                 index=i, 
                 voice_name=target_voice
             )
