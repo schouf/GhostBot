@@ -77,7 +77,8 @@ STRICT RULES:
 2. THE LOOP: The script MUST end unresolved in a way that grammatically flows perfectly back into the first line.
 3. PACING: Break the script into short, punchy, fast-paced lines. Keep tension high.
 4. TONE: Serious, investigative, grim, and highly suspenseful. No fictional horror.
-5. EMOTIONS: Assign realistic narrator emotions per line (e.g., "urgent", "grim", "disbelief", "whisper", "authoritative").
+5. VISUAL KEYWORDS: You MUST invent highly specific, unique visual keywords for EVERY line (e.g., "muddy footprints on carpet", "rusty abandoned car in woods", "flickering motel neon sign"). DO NOT use generic words like "dark room" or "police tape".
+6. EMOTIONS: Assign realistic narrator emotions per line (e.g., "urgent", "grim", "disbelief", "whisper", "authoritative").
 
 Return ONLY valid JSON in this format:
 {{
@@ -89,7 +90,7 @@ Return ONLY valid JSON in this format:
     {{
       "emotion": "urgent",
       "text": "Hook line goes here.",
-      "visual_keyword": "police tape night"
+      "visual_keyword": "muddy footprints on carpet"
     }}
   ]
 }}
@@ -138,17 +139,26 @@ def add_sfx(audio_clip, text):
 def get_visual_clip(keyword, filename, duration):
     headers = {"Authorization": PEXELS_KEY}
     url = "https://api.pexels.com/videos/search"
+    
+    # Randomize the page and fetch more options to ensure fresh visuals
     params = {
-        "query": f"{keyword} true crime detective evidence mystery dark",
-        "per_page": 3,
+        "query": f"{keyword} cinematic dark", 
+        "per_page": 15, 
+        "page": random.randint(1, 4), 
         "orientation": "portrait"
     }
+    
     try:
         r = requests.get(url, headers=headers, params=params)
         data = r.json()
+        
         if data.get("videos"):
-            best = max(data["videos"], key=lambda x: x["width"] * x["height"])
-            link = best["video_files"][0]["link"]
+            # Pick a RANDOM video from the fetched pool, preventing repetition
+            chosen_video = random.choice(data["videos"])
+            
+            best_file = max(chosen_video["video_files"], key=lambda x: x["width"] * x["height"])
+            link = best_file["link"]
+            
             with open(filename, "wb") as f:
                 f.write(requests.get(link).content)
 
@@ -162,8 +172,10 @@ def get_visual_clip(keyword, filename, duration):
             if clip.w < 1080: clip = clip.resize(width=1080)
             clip = clip.crop(x1=clip.w/2 - 540, width=1080, height=1920)
             return clip
-    except:
+    except Exception as e:
+        print(f"Pexels fetch failed: {e}")
         pass
+        
     return ColorClip(size=(1080, 1920), color=(15, 15, 15), duration=duration)
 
 # ================== SUBTITLES ================== #
