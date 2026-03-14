@@ -23,10 +23,9 @@ class VoiceEngine:
             name="en-US-Journey-D"
         )
         
+        # REMOVED pitch and speaking_rate because Journey voices do not support them.
         self.audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.LINEAR16,
-            speaking_rate=0.90, # Slightly slowed down for suspense
-            pitch=-2.0 # Dropped slightly for a darker tone
+            audio_encoding=texttospeech.AudioEncoding.LINEAR16
         )
 
     def _podcast_mastering(self, sound):
