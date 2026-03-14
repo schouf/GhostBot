@@ -78,17 +78,14 @@ STRICT RULES:
 3. PACING: Break the script into short, punchy, fast-paced lines. Keep tension high.
 4. TONE: Serious, investigative, grim, and highly suspenseful. No fictional horror.
 5. VISUAL KEYWORDS: You MUST invent highly specific, unique visual keywords for EVERY line (e.g., "muddy footprints on carpet", "rusty abandoned car in woods", "flickering motel neon sign"). DO NOT use generic words like "dark room" or "police tape".
-6. EMOTIONS: Assign realistic narrator emotions per line (e.g., "urgent", "grim", "disbelief", "whisper", "authoritative").
 
 Return ONLY valid JSON in this format:
 {{
   "title": "High curiosity viral title #shorts #truecrime",
   "description": "Curiosity driven description.",
   "tags": ["truecrime", "mystery", "shorts", "unsolved"],
-  "recommended_voice_model": "Qwen-Standard-Storyteller",
   "lines": [
     {{
-      "emotion": "urgent",
       "text": "Hook line goes here.",
       "visual_keyword": "muddy footprints on carpet"
     }}
@@ -234,7 +231,7 @@ def main_pipeline():
     for i, line in enumerate(script["lines"]):
         try:
             wav_file = voice_engine.generate_acting_line(
-                line["text"], i, emotion=line.get("emotion", "serious")
+                line["text"], i
             )
 
             if not wav_file:
