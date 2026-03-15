@@ -2,15 +2,18 @@ import os
 import time
 import requests
 
-# Load credentials from GitHub Secrets
+# Load credentials from environment variables (GitHub Secrets)
 ACCESS_TOKEN = os.environ.get('META_ACCESS_TOKEN')
 FB_PAGE_ID = os.environ.get('FB_PAGE_ID')
 IG_USER_ID = os.environ.get('IG_USER_ID')
 
 def upload_to_facebook(video_path, caption):
-    print("Uploading to Facebook...")
+    print("📘 Uploading to Facebook Reels...")
+    if not ACCESS_TOKEN or not FB_PAGE_ID:
+        print("❌ Missing Facebook credentials. Skipping.")
+        return
+
     url = f"https://graph.facebook.com/v19.0/{FB_PAGE_ID}/videos"
-    
     payload = {
         'description': caption,
         'access_token': ACCESS_TOKEN
@@ -30,7 +33,7 @@ def upload_to_facebook(video_path, caption):
         print(f"❌ Facebook upload error: {e}")
 
 def get_temp_public_url(file_path):
-    print("Uploading video to temporary host (Catbox) for Instagram...")
+    print("☁️ Uploading video to temporary host (Catbox) for Instagram...")
     url = "https://catbox.moe/user/api.php"
     data = {'reqtype': 'fileupload'}
     
@@ -51,8 +54,11 @@ def get_temp_public_url(file_path):
         return None
 
 def upload_to_instagram(video_url, caption):
-    print("Uploading to Instagram Reels...")
-    
+    print("📸 Uploading to Instagram Reels...")
+    if not ACCESS_TOKEN or not IG_USER_ID:
+        print("❌ Missing Instagram credentials. Skipping.")
+        return
+
     # Step 1: Create the media container
     container_url = f"https://graph.facebook.com/v19.0/{IG_USER_ID}/media"
     container_payload = {
@@ -70,7 +76,7 @@ def upload_to_instagram(video_url, caption):
         return
         
     creation_id = container_data['id']
-    print(f"Container created (ID: {creation_id}). Waiting for Meta to process...")
+    print(f"⏳ Container created (ID: {creation_id}). Waiting for Meta to process...")
     
     # Step 2: Poll until processing is finished
     status_url = f"https://graph.facebook.com/v19.0/{creation_id}"
@@ -90,7 +96,7 @@ def upload_to_instagram(video_url, caption):
             print(f"❌ Instagram processing failed: {status}")
             return
             
-        print("Processing... checking again in 10 seconds.")
+        print("🔄 Processing... checking again in 10 seconds.")
         time.sleep(10)
         
     # Step 3: Publish the container
@@ -107,23 +113,3 @@ def upload_to_instagram(video_url, caption):
         print(f"✅ Instagram upload successful! Post ID: {publish_data['id']}")
     else:
         print(f"❌ Instagram publish failed: {publish_data}")
-
-if __name__ == "__main__":
-    # Ensure this matches where your bot saves the final video
-    LOCAL_VIDEO_PATH = "output/final_video.mp4" 
-    CAPTION = "Check out today's glitch! 🕵️‍♂️🔪 #TrueCrime #Mystery"
-    
-    print("--- Starting Meta API Uploads ---")
-    
-    if not os.path.exists(LOCAL_VIDEO_PATH):
-        print(f"❌ Error: Video file not found at {LOCAL_VIDEO_PATH}")
-    else:
-        # 1. Upload directly to Facebook
-        upload_to_facebook(LOCAL_VIDEO_PATH, CAPTION)
-        
-        # 2. Get public URL for Instagram, then upload
-        public_url = get_temp_public_url(LOCAL_VIDEO_PATH)
-        if public_url:
-            upload_to_instagram(public_url, CAPTION)
-            
-    print("--- Meta Uploads Complete ---")
