@@ -20,12 +20,14 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from neural_voice import VoiceEngine
 
+import meta_upload  # <--- NEW: Import our Meta Upload module
+
 # ================== CONFIG ================== #
 
-GEMINI_KEY = os.environ["GEMINI_API_KEY"]
-PEXELS_KEY = os.environ["PEXELS_API_KEY"]
-YOUTUBE_TOKEN_VAL = os.environ["YOUTUBE_TOKEN_JSON"]
-CHANNEL_HANDLE = "@TheGlitchArchive" # Added for the watermark
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
+PEXELS_KEY = os.environ.get("PEXELS_API_KEY")
+YOUTUBE_TOKEN_VAL = os.environ.get("YOUTUBE_TOKEN_JSON")
+CHANNEL_HANDLE = "@TheGlitchArchive" 
 
 if not hasattr(PIL.Image, "ANTIALIAS"):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
@@ -129,6 +131,33 @@ Return ONLY valid JSON in this format:
             continue
 
     return None
+
+def generate_meta_caption(metadata):
+    """Generates an optimized caption for IG/FB based on the generated YouTube metadata"""
+    print("🤖 Generating optimized Meta caption with Gemini...")
+    client = genai.Client(api_key=GEMINI_KEY)
+    
+    prompt = f"""
+    Write a highly engaging, suspenseful caption for a Facebook Reel and Instagram Reel about this True Crime video:
+    Video Title: {metadata['title']}
+    Video Description: {metadata['description']}
+
+    RULES:
+    - The tone should be captivating and mysterious.
+    - Include a call to action asking viewers to comment their thoughts.
+    - Include 5-7 highly relevant, trending hashtags (e.g. #TrueCrime #Mystery).
+    - Do not use any quotation marks around the final output.
+    - Keep it under 150 words.
+    """
+    
+    try:
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        print("✅ Meta Caption generated successfully!")
+        return response.text.strip()
+    except Exception as e:
+        print(f"❌ Gemini API Error for caption: {e}")
+        # Fallback caption so the pipeline doesn't break
+        return f"{metadata['title']}\n\nWhat do you think happened? Let us know below! 👇\n\n#TrueCrime #Mystery #Shorts #Unsolved"
 
 # ================== SFX ================== #
 
@@ -342,7 +371,6 @@ def upload_to_youtube(file_path, metadata):
         creds = Credentials.from_authorized_user_info(json.loads(YOUTUBE_TOKEN_VAL))
         youtube = build("youtube", "v3", credentials=creds)
         
-        # We ensure all SEO tags and the optimized description are passed to YouTube
         youtube.videos().insert(
             part="snippet,status",
             body={
@@ -359,13 +387,55 @@ def upload_to_youtube(file_path, metadata):
             },
             media_body=MediaFileUpload(file_path, chunksize=-1, resumable=True)
         ).execute()
-        print("✅ Upload Successful")
+        print("✅ YouTube Upload Successful")
     except Exception as e:
-        print(f"❌ Upload failed: {e}")
+        print(f"❌ YouTube Upload failed: {e}")
+
+# ================== CLEANUP ================== #
+
+def cleanup_files(final_video):
+    """Deletes all temporary Pexels clips, generated audio, and the final video to save space."""
+    print("🧹 Starting cleanup phase...")
+    try:
+        if final_video and os.path.exists(final_video):
+            os.remove(final_video)
+            print(f"Deleted {final_video}")
+
+        for f in glob.glob("temp_vid_*.mp4"):
+            os.remove(f)
+            print(f"Deleted {f}")
+            
+        for f in glob.glob("temp_*.wav"):
+            os.remove(f)
+            
+        print("✅ Cleanup complete!")
+    except Exception as e:
+        print(f"⚠️ Error during cleanup: {e}")
 
 # ================== ENTRY ================== #
 
 if __name__ == "__main__":
+    # 1. Generate and render the video
     video_path, metadata = main_pipeline()
+    
     if video_path and metadata:
+        # 2. Upload to YouTube
         upload_to_youtube(video_path, metadata)
+        
+        # 3. Generate Social Media Caption
+        meta_caption = generate_meta_caption(metadata)
+        
+        # 4. Upload to Facebook
+        meta_upload.upload_to_facebook(video_path, meta_caption)
+        
+        # 5. Upload to Instagram (Requires temporary hosting)
+        temp_public_url = meta_upload.get_temp_public_url(video_path)
+        if temp_public_url:
+            meta_upload.upload_to_instagram(temp_public_url, meta_caption)
+        else:
+            print("⏭️ Skipping Instagram due to temporary host failure.")
+            
+        # 6. Delete all files so GitHub Actions doesn't run out of storage
+        cleanup_files(video_path)
+        
+    print("🎉 Daily GhostBot execution finished!")
