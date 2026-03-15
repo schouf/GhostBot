@@ -8,7 +8,7 @@ from pydub.effects import compress_dynamic_range, normalize
 
 class VoiceEngine:
     def __init__(self):
-        print("🎚️ Initializing Gemini TTS Voice Engine...")
+        print("🎚️ Initializing Gemini Master-Director Engine...")
         
         self.api_key = os.environ.get("GEMINI_API_KEY")
         if not self.api_key:
@@ -17,7 +17,7 @@ class VoiceEngine:
         self.client = genai.Client(api_key=self.api_key)
 
     def _podcast_mastering(self, sound):
-        """Applies true crime EQ and cinematic pacing to the Gemini audio."""
+        """Applies true crime EQ. Pacing is controlled strictly by SSML."""
         sound = sound.low_pass_filter(8000) 
         sound = compress_dynamic_range(sound, threshold=-15.0, ratio=5.0, attack=5.0, release=50.0)
         sound = normalize(sound, headroom=0.1)
@@ -28,9 +28,9 @@ class VoiceEngine:
         
         return sound
 
-    def generate_acting_line(self, acting_text, index, voice_name="Charon"):
+    def generate_acting_line(self, acting_text, style_instruction, index, voice_name="Charon"):
         filename = f"temp_voice_{index}.wav"
-        print(f"🎙️ Gemini Casting '{voice_name}': '{acting_text}'")
+        print(f"🎙️ Gemini Rendering [{voice_name}] | Style: {style_instruction}")
 
         config = types.GenerateContentConfig(
             response_modalities=["AUDIO"],
@@ -43,13 +43,25 @@ class VoiceEngine:
             )
         )
 
-        prompt = f"Read the following line verbatim. Apply the emotions and stage directions indicated in brackets. Use the ellipses for dramatic pauses. Do not add any conversational filler. Just perform the line:\n\n{acting_text}"
+        # The Ultimate Fusion Prompt: Macro-Style + Micro-SSML
+        prompt = f"""You are an elite, award-winning voice actor narrating a gritty True Crime documentary. 
 
-        # Automatic Rate Limit Shield: Will retry up to 3 times if Quota is exhausted
+YOUR VOCAL STYLE/EMOTION FOR THIS LINE: 
+"{style_instruction}"
+
+CRITICAL INSTRUCTIONS:
+Process the following SSML markup and render the audio performance exactly as tagged. 
+Pay strict attention to the <prosody>, <emphasis>, and <break> tags to control speed, pitch, emotion, and dramatic pauses, while maintaining your requested Vocal Style above.
+
+<speak>
+{acting_text}
+</speak>"""
+
+        # Automatic Rate Limit Shield
         for attempt in range(3):
             try:
                 response = self.client.models.generate_content(
-                    model="gemini-2.5-flash-preview-tts", # Correct audio endpoint
+                    model="gemini-2.5-flash-preview-tts",
                     contents=prompt,
                     config=config
                 )
@@ -67,7 +79,7 @@ class VoiceEngine:
 
                 temp_raw = f"temp_raw_{index}.wav"
                 
-                # Gemini returns RAW PCM data. We must construct the WAV headers manually.
+                # Gemini returns RAW PCM data. We construct the WAV headers manually.
                 with wave.open(temp_raw, "wb") as wf:
                     wf.setnchannels(1) # Mono
                     wf.setsampwidth(2) # 16-bit
