@@ -20,7 +20,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from neural_voice import VoiceEngine
 
-import meta_upload  # <--- NEW: Import our Meta Upload module
+import meta_upload  
 
 # ================== CONFIG ================== #
 
@@ -28,6 +28,7 @@ GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 PEXELS_KEY = os.environ.get("PEXELS_API_KEY")
 YOUTUBE_TOKEN_VAL = os.environ.get("YOUTUBE_TOKEN_JSON")
 CHANNEL_HANDLE = "@TheGlitchArchive" 
+TOPICS_FILE = "topics.txt" # <--- NEW: Memory bank file
 
 if not hasattr(PIL.Image, "ANTIALIAS"):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
@@ -54,6 +55,26 @@ def anti_ban_sleep():
         print(f"🕵️ Anti-Ban Sleep: {sleep_seconds//60} minutes")
         time.sleep(sleep_seconds)
 
+# ================== MEMORY SYSTEM ================== #
+
+def get_past_topics():
+    """Reads the past topics to avoid repetition."""
+    if not os.path.exists(TOPICS_FILE):
+        return ""
+    with open(TOPICS_FILE, "r", encoding="utf-8") as f:
+        topics = f.read().splitlines()
+    # Keep the last 50 to avoid bloating the prompt too much
+    return "\n".join(topics[-50:])
+
+def save_new_topic(title):
+    """Appends the successful video title to the memory bank."""
+    try:
+        with open(TOPICS_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{title}\n")
+        print(f"💾 Saved '{title}' to memory bank.")
+    except Exception as e:
+        print(f"⚠️ Failed to save topic: {e}")
+
 # ================== SCRIPT & SEO GENERATION ================== #
 
 def generate_viral_script():
@@ -61,35 +82,32 @@ def generate_viral_script():
 
     client = genai.Client(api_key=GEMINI_KEY)
     models_to_try = ["models/gemini-2.5-pro", "models/gemini-2.5-flash"]
-
-    niche = random.choice([
-        "Unsolved Disappearances",
-        "Bizarre Heists",
-        "People Who Faked Their Own Deaths",
-        "The Most Elaborate Scams",
-        "Crimes Solved Decades Later"
-    ])
+    
+    # Fetch memory
+    past_topics = get_past_topics()
+    avoid_instruction = f"CRITICAL: Do NOT write about these topics, we have already covered them:\n{past_topics}\n" if past_topics else "No past topics yet."
 
     prompt = f"""
 You are an elite viral YouTube Shorts True Crime writer, an Award-Winning Voice Director, AND a Master YouTube SEO Expert.
 
-TOPIC: {niche}
+Your task is to write a highly engaging, high-retention short-form script about a highly specific, obscure true crime case, unsolved mystery, or bizarre historical event. Do not invent a fake story; use a real, documented case, but focus on the most baffling aspects.
 
-STRICT RULES:
-1. THE HOOK: First line MUST be under 3 seconds and drop a massive, shocking fact immediately.
-2. THE LOOP: The script MUST end unresolved, grammatically flowing perfectly back into the first line.
-3. STYLE INSTRUCTIONS: Provide a specific `style_instruction` for each line (e.g., "Hushed, terrified whisper", "Cold, deadpan, and chilling").
+{avoid_instruction}
+
+STRICT STORYTELLING RULES:
+1. THE HOOK (0-3s): First line MUST drop a massive, shocking fact immediately without context to create a curiosity gap.
+2. THE ESCALATION: Every line must raise the stakes. No boring background info.
+3. THE LOOP: The script MUST end abruptly on a cliffhanger that grammatically flows perfectly back into the first line of the video.
 4. SSML MICRO-DIRECTION: Engineer the `acting_text` using strict SSML tags.
    - Use <prosody rate="slow" pitch="-2st" volume="soft"> for creepy lines.
    - Use <prosody rate="fast" pitch="+1st" volume="loud"> for urgent panics.
    - Use <break time="800ms"/> for dramatic pauses.
-   - Use <emphasis level="strong"> on shocking words.
 5. CASTING: Choose ONE specific voice model: "Charon" (gritty male), "Fenrir" (intense male), "Aoede" (haunting female), or "Kore" (unsettling female).
-6. VISUAL KEYWORDS: Invent highly specific visual keywords for EVERY line.
-7. YOUTUBE SEO (CRITICAL):
-   - title: Must be under 50 characters, use a "Curiosity Gap" to force clicks, and end with #shorts #truecrime.
-   - description: Start with a controversial or chilling question to drive comments, followed by 3 lines of high-volume SEO keywords.
-   - tags: Provide exactly 15 highly searched tags related to the niche (e.g., "unsolved mystery", "true crime documentary").
+6. VISUAL KEYWORDS: Invent highly specific visual keywords for EVERY line to ensure high-quality B-roll fetching.
+7. YOUTUBE SEO:
+   - title: Must be under 50 characters, use a "Curiosity Gap", and end with #shorts #truecrime.
+   - description: Start with a chilling question to drive comments, followed by 3 lines of high-volume SEO keywords.
+   - tags: Provide exactly 15 highly searched tags related to the specific case.
 
 Return ONLY valid JSON in this format:
 {{
@@ -126,14 +144,13 @@ Return ONLY valid JSON in this format:
         except Exception as e:
             print(f"❌ Model error ({model}): {e}")
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                print("⏳ Quota hit during script generation. Sleeping 35s to let API reset...")
+                print("⏳ Quota hit during script generation. Sleeping 35s...")
                 time.sleep(35)
             continue
 
     return None
 
 def generate_meta_caption(metadata):
-    """Generates an optimized caption for IG/FB based on the generated YouTube metadata"""
     print("🤖 Generating optimized Meta caption with Gemini...")
     client = genai.Client(api_key=GEMINI_KEY)
     
@@ -156,7 +173,6 @@ def generate_meta_caption(metadata):
         return response.text.strip()
     except Exception as e:
         print(f"❌ Gemini API Error for caption: {e}")
-        # Fallback caption so the pipeline doesn't break
         return f"{metadata['title']}\n\nWhat do you think happened? Let us know below! 👇\n\n#TrueCrime #Mystery #Shorts #Unsolved"
 
 # ================== SFX ================== #
@@ -315,14 +331,12 @@ def main_pipeline():
     print("✂️ Rendering Final Video with Transitions & Branding...")
     final_video = CompositeVideoClip(final_clips)
 
-    # --- ADD SUBTITLES ---
     temp_voice_track = "temp_master_voice.wav"
     final_video.audio.write_audiofile(temp_voice_track, fps=24000, logger=None)
     final_video = add_dynamic_subtitles(final_video, temp_voice_track)
     if os.path.exists(temp_voice_track):
         os.remove(temp_voice_track)
 
-    # --- ADD BRAND WATERMARK ---
     try:
         watermark = TextClip(
             CHANNEL_HANDLE, 
@@ -336,7 +350,6 @@ def main_pipeline():
     except Exception as e:
         print(f"⚠️ Could not add watermark: {e}")
 
-    # --- ADD BACKGROUND MUSIC ---
     print("🎵 Adding Background Music...")
     music_files = glob.glob("music/track*.mp3")
     
@@ -365,7 +378,7 @@ def main_pipeline():
 
 def upload_to_youtube(file_path, metadata):
     if not file_path:
-        return
+        return False
     print("🚀 Uploading to YouTube...")
     try:
         creds = Credentials.from_authorized_user_info(json.loads(YOUTUBE_TOKEN_VAL))
@@ -388,13 +401,14 @@ def upload_to_youtube(file_path, metadata):
             media_body=MediaFileUpload(file_path, chunksize=-1, resumable=True)
         ).execute()
         print("✅ YouTube Upload Successful")
+        return True
     except Exception as e:
         print(f"❌ YouTube Upload failed: {e}")
+        return False
 
 # ================== CLEANUP ================== #
 
 def cleanup_files(final_video):
-    """Deletes all temporary Pexels clips, generated audio, and the final video to save space."""
     print("🧹 Starting cleanup phase...")
     try:
         if final_video and os.path.exists(final_video):
@@ -403,7 +417,6 @@ def cleanup_files(final_video):
 
         for f in glob.glob("temp_vid_*.mp4"):
             os.remove(f)
-            print(f"Deleted {f}")
             
         for f in glob.glob("temp_*.wav"):
             os.remove(f)
@@ -415,27 +428,30 @@ def cleanup_files(final_video):
 # ================== ENTRY ================== #
 
 if __name__ == "__main__":
-    # 1. Generate and render the video
     video_path, metadata = main_pipeline()
     
     if video_path and metadata:
-        # 2. Upload to YouTube
-        upload_to_youtube(video_path, metadata)
+        # 1. Upload to YouTube
+        upload_success = upload_to_youtube(video_path, metadata)
         
-        # 3. Generate Social Media Caption
-        meta_caption = generate_meta_caption(metadata)
-        
-        # 4. Upload to Facebook
-        meta_upload.upload_to_facebook(video_path, meta_caption)
-        
-        # 5. Upload to Instagram (Requires temporary hosting)
-        temp_public_url = meta_upload.get_temp_public_url(video_path)
-        if temp_public_url:
-            meta_upload.upload_to_instagram(temp_public_url, meta_caption)
-        else:
-            print("⏭️ Skipping Instagram due to temporary host failure.")
+        if upload_success:
+            # 2. Save topic to memory bank to prevent repeats
+            save_new_topic(metadata['title'])
             
-        # 6. Delete all files so GitHub Actions doesn't run out of storage
+            # 3. Generate Social Media Caption
+            meta_caption = generate_meta_caption(metadata)
+            
+            # 4. Upload to Facebook
+            meta_upload.upload_to_facebook(video_path, meta_caption)
+            
+            # 5. Upload to Instagram
+            temp_public_url = meta_upload.get_temp_public_url(video_path)
+            if temp_public_url:
+                meta_upload.upload_to_instagram(temp_public_url, meta_caption)
+            else:
+                print("⏭️ Skipping Instagram due to temporary host failure.")
+        
+        # 6. Delete temp files
         cleanup_files(video_path)
         
     print("🎉 Daily GhostBot execution finished!")
