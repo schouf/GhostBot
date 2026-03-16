@@ -11,6 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     # INCREASED TIMEOUT TO 6 HOURS
     timeout-minutes: 360 
+    
+    # NEW: Grants the action permission to push code back to the repo
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Code
@@ -36,8 +40,22 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
-          # --- NEW SECRETS FOR FACEBOOK & INSTAGRAM ---
+          # --- SECRETS FOR FACEBOOK & INSTAGRAM ---
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
         run: python main.py
+
+      - name: Commit and Push Memory Bank Updates
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Stage the topics file
+          git add topics.txt
+          
+          # Commit only if there are changes (prevents action from failing if no new video was made)
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: update topics memory bank [skip ci]"
+          
+          # Push back to the main branch
+          git push
