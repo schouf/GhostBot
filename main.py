@@ -25,10 +25,11 @@ import meta_upload
 # ================== CONFIG ================== #
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
+OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY") # <--- NEW: Fallback API Key
 PEXELS_KEY = os.environ.get("PEXELS_API_KEY")
 YOUTUBE_TOKEN_VAL = os.environ.get("YOUTUBE_TOKEN_JSON")
 CHANNEL_HANDLE = "@TheGlitchArchive" 
-TOPICS_FILE = "topics.txt" # <--- NEW: Memory bank file
+TOPICS_FILE = "topics.txt"
 
 if not hasattr(PIL.Image, "ANTIALIAS"):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
@@ -63,7 +64,6 @@ def get_past_topics():
         return ""
     with open(TOPICS_FILE, "r", encoding="utf-8") as f:
         topics = f.read().splitlines()
-    # Keep the last 50 to avoid bloating the prompt too much
     return "\n".join(topics[-50:])
 
 def save_new_topic(title):
@@ -83,7 +83,6 @@ def generate_viral_script():
     client = genai.Client(api_key=GEMINI_KEY)
     models_to_try = ["models/gemini-2.5-pro", "models/gemini-2.5-flash"]
     
-    # Fetch memory
     past_topics = get_past_topics()
     avoid_instruction = f"CRITICAL: Do NOT write about these topics, we have already covered them:\n{past_topics}\n" if past_topics else "No past topics yet."
 
@@ -132,6 +131,7 @@ Return ONLY valid JSON in this format:
         response_mime_type="application/json"
     )
 
+    # 1. Primary Strategy: Try Gemini Models
     for model in models_to_try:
         try:
             print(f"Trying {model}...")
@@ -144,14 +144,43 @@ Return ONLY valid JSON in this format:
         except Exception as e:
             print(f"❌ Model error ({model}): {e}")
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                print("⏳ Quota hit during script generation. Sleeping 35s...")
-                time.sleep(35)
+                print("⏳ Quota hit during script generation. Sleeping 5s before fallback...")
+                time.sleep(5)
             continue
+
+    # 2. Fallback Strategy: OpenRouter (Llama 3.3)
+    if OPENROUTER_KEY:
+        print("🔄 Gemini exhausted/failed. Falling back to OpenRouter (Llama 3.3 70B)...")
+        try:
+            headers = {
+                "Authorization": f"Bearer {OPENROUTER_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "meta-llama/llama-3.3-70b-instruct:free",
+                "messages": [{"role": "user", "content": prompt}]
+            }
+            
+            r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+            
+            if r.status_code == 200:
+                response_content = r.json()['choices'][0]['message']['content']
+                # Clean up markdown code blocks if Llama formats it with ```json
+                cleaned_content = response_content.replace("```json", "").replace("```", "").strip()
+                data = json.loads(cleaned_content)
+                
+                if "lines" in data and len(data["lines"]) > 0:
+                    print("✅ Script & SEO generated with OpenRouter Fallback")
+                    return data
+            else:
+                print(f"❌ OpenRouter request failed: {r.text}")
+        except Exception as e:
+            print(f"❌ OpenRouter Fallback error: {e}")
 
     return None
 
 def generate_meta_caption(metadata):
-    print("🤖 Generating optimized Meta caption with Gemini...")
+    print("🤖 Generating optimized Meta caption...")
     client = genai.Client(api_key=GEMINI_KEY)
     
     prompt = f"""
@@ -167,12 +196,36 @@ def generate_meta_caption(metadata):
     - Keep it under 150 words.
     """
     
+    # 1. Primary Strategy: Try Gemini
     try:
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        print("✅ Meta Caption generated successfully!")
+        print("✅ Meta Caption generated successfully with Gemini!")
         return response.text.strip()
     except Exception as e:
         print(f"❌ Gemini API Error for caption: {e}")
+        
+        # 2. Fallback Strategy: OpenRouter
+        if OPENROUTER_KEY:
+            print("🔄 Falling back to OpenRouter for caption generation...")
+            try:
+                headers = {
+                    "Authorization": f"Bearer {OPENROUTER_KEY}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": "meta-llama/llama-3.3-70b-instruct:free",
+                    "messages": [{"role": "user", "content": prompt}]
+                }
+                r = requests.post("[https://openrouter.ai/api/v1/chat/completions](https://openrouter.ai/api/v1/chat/completions)", headers=headers, json=payload)
+                if r.status_code == 200:
+                    caption = r.json()['choices'][0]['message']['content'].strip()
+                    caption = caption.strip('"') # Remove quotes if added
+                    print("✅ Meta Caption generated successfully with OpenRouter!")
+                    return caption
+            except Exception as or_e:
+                print(f"❌ OpenRouter API Error for caption: {or_e}")
+
+        # 3. Ultimate Fallback (Safety net so the upload doesn't fail)
         return f"{metadata['title']}\n\nWhat do you think happened? Let us know below! 👇\n\n#TrueCrime #Mystery #Shorts #Unsolved"
 
 # ================== SFX ================== #
@@ -196,7 +249,7 @@ def add_sfx(audio_clip, text):
 
 def get_visual_clip(keyword, filename, duration):
     headers = {"Authorization": PEXELS_KEY}
-    url = "https://api.pexels.com/videos/search"
+    url = "[https://api.pexels.com/videos/search](https://api.pexels.com/videos/search)"
     
     params = {
         "query": f"{keyword} cinematic dark", 
@@ -295,6 +348,7 @@ def main_pipeline():
             style_instruction = line.get("style_instruction", "Serious and highly suspenseful.")
             clean_text = line.get("clean_text", line.get("text", ""))
 
+            # TTS logic handled by neural_voice.py (still uses Gemini internally)
             wav_file = voice_engine.generate_acting_line(
                 acting_text=acting_input, 
                 style_instruction=style_instruction,
