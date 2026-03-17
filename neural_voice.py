@@ -57,52 +57,63 @@ Pay strict attention to the <prosody>, <emphasis>, and <break> tags to control s
 {acting_text}
 </speak>"""
 
-        # Automatic Rate Limit Shield
-        for attempt in range(3):
-            try:
-                response = self.client.models.generate_content(
-                    model="gemini-2.5-flash-preview-tts",
-                    contents=prompt,
-                    config=config
-                )
+        # The Waterfall Fallback Architecture
+        models_to_try = ["gemini-2.5-pro", "gemini-2.5-flash"]
 
-                audio_bytes = None
-                if response.candidates and response.candidates[0].content.parts:
-                    for part in response.candidates[0].content.parts:
-                        if part.inline_data:
-                            audio_bytes = part.inline_data.data
-                            break
+        for model_name in models_to_try:
+            print(f"🔄 Attempting TTS with model: {model_name}")
+            
+            # 3 Attempts per model to handle temporary 503 overloads or 429 quota hits
+            for attempt in range(3):
+                try:
+                    response = self.client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                        config=config
+                    )
 
-                if not audio_bytes:
-                    print(f"⚠️ No audio data returned for line {index}")
-                    return None
+                    audio_bytes = None
+                    if response.candidates and response.candidates[0].content.parts:
+                        for part in response.candidates[0].content.parts:
+                            if part.inline_data:
+                                audio_bytes = part.inline_data.data
+                                break
 
-                temp_raw = f"temp_raw_{index}.wav"
-                
-                # Gemini returns RAW PCM data. We construct the WAV headers manually.
-                with wave.open(temp_raw, "wb") as wf:
-                    wf.setnchannels(1) # Mono
-                    wf.setsampwidth(2) # 16-bit
-                    wf.setframerate(24000) # 24kHz
-                    wf.writeframes(audio_bytes)
+                    if not audio_bytes:
+                        print(f"⚠️ No audio data returned for line {index} on {model_name}. Retrying...")
+                        continue # Skip to the next attempt in the loop
 
-                sound = AudioSegment.from_file(temp_raw)
-                sound = self._podcast_mastering(sound)
-                sound.export(filename, format="wav")
-
-                if os.path.exists(temp_raw):
-                    os.remove(temp_raw)
-
-                return filename
-
-            except Exception as e:
-                error_str = str(e)
-                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                    print(f"⏳ Rate limit hit (429). Sleeping 35 seconds to reset quota... (Attempt {attempt+1}/3)")
-                    time.sleep(35)
-                else:
-                    print(f"⚠️ Gemini Audio Generation Failed: {e}")
-                    return None
+                    temp_raw = f"temp_raw_{index}.wav"
                     
-        print(f"❌ Failed to generate audio for line {index} after 3 attempts.")
+                    # Gemini returns RAW PCM data. We construct the WAV headers manually.
+                    with wave.open(temp_raw, "wb") as wf:
+                        wf.setnchannels(1) # Mono
+                        wf.setsampwidth(2) # 16-bit
+                        wf.setframerate(24000) # 24kHz
+                        wf.writeframes(audio_bytes)
+
+                    sound = AudioSegment.from_file(temp_raw)
+                    sound = self._podcast_mastering(sound)
+                    sound.export(filename, format="wav")
+
+                    if os.path.exists(temp_raw):
+                        os.remove(temp_raw)
+
+                    print(f"✅ Audio generated successfully with {model_name}")
+                    return filename
+
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if "429" in error_str or "resource_exhausted" in error_str or "503" in error_str or "unavailable" in error_str:
+                        # Escalating sleep timer: 35s, then 45s, then 55s
+                        wait_time = 35 + (attempt * 10) 
+                        print(f"⏳ Rate limit/Overload ({model_name}). Sleeping {wait_time}s... (Attempt {attempt+1}/3)")
+                        time.sleep(wait_time)
+                    else:
+                        print(f"⚠️ {model_name} Fatal Error: {e}")
+                        break # Break the attempt loop for this model and move to the next model
+            
+            print(f"⏭️ Exhausted attempts for {model_name}, falling back to next available model...")
+
+        print(f"❌ Failed to generate audio for line {index} after exhausting all models and retries.")
         return None
