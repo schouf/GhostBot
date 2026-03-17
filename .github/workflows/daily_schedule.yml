@@ -38,6 +38,7 @@ jobs:
       - name: Run GhostBot
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }} # <--- ADDED OPENROUTER KEY HERE
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
           # --- SECRETS FOR FACEBOOK & INSTAGRAM ---
