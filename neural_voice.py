@@ -57,8 +57,8 @@ Pay strict attention to the <prosody>, <emphasis>, and <break> tags to control s
 {acting_text}
 </speak>"""
 
-        # The Waterfall Fallback Architecture
-        models_to_try = ["gemini-2.5-pro", "gemini-2.5-flash"]
+        # STRATEGIC FIX: Use the dedicated TTS endpoint first to save Pro quota!
+        models_to_try = ["gemini-2.5-flash-preview-tts", "gemini-2.5-pro"]
 
         for model_name in models_to_try:
             print(f"🔄 Attempting TTS with model: {model_name}")
@@ -81,15 +81,14 @@ Pay strict attention to the <prosody>, <emphasis>, and <break> tags to control s
 
                     if not audio_bytes:
                         print(f"⚠️ No audio data returned for line {index} on {model_name}. Retrying...")
-                        continue # Skip to the next attempt in the loop
+                        continue 
 
                     temp_raw = f"temp_raw_{index}.wav"
                     
-                    # Gemini returns RAW PCM data. We construct the WAV headers manually.
                     with wave.open(temp_raw, "wb") as wf:
-                        wf.setnchannels(1) # Mono
-                        wf.setsampwidth(2) # 16-bit
-                        wf.setframerate(24000) # 24kHz
+                        wf.setnchannels(1) 
+                        wf.setsampwidth(2) 
+                        wf.setframerate(24000) 
                         wf.writeframes(audio_bytes)
 
                     sound = AudioSegment.from_file(temp_raw)
@@ -105,13 +104,12 @@ Pay strict attention to the <prosody>, <emphasis>, and <break> tags to control s
                 except Exception as e:
                     error_str = str(e).lower()
                     if "429" in error_str or "resource_exhausted" in error_str or "503" in error_str or "unavailable" in error_str:
-                        # Escalating sleep timer: 35s, then 45s, then 55s
                         wait_time = 35 + (attempt * 10) 
                         print(f"⏳ Rate limit/Overload ({model_name}). Sleeping {wait_time}s... (Attempt {attempt+1}/3)")
                         time.sleep(wait_time)
                     else:
                         print(f"⚠️ {model_name} Fatal Error: {e}")
-                        break # Break the attempt loop for this model and move to the next model
+                        break 
             
             print(f"⏭️ Exhausted attempts for {model_name}, falling back to next available model...")
 
