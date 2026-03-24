@@ -119,16 +119,17 @@ Do not invent a fake story; use a real, documented case, historical event, or wi
 {avoid_instruction}
 
 STRICT STORYTELLING & VIRAL RULES:
-1. THE HOOK (0-3s): First line MUST drop a massive, shocking fact immediately. No background info.
-2. OPEN LOOPS: Ask a compelling question early on, but delay the answer until the very end to force watch-time.
-3. THE LOOP: The script MUST end abruptly on a cliffhanger that grammatically flows perfectly back into the first line of the video.
-4. SSML MICRO-DIRECTION: Engineer the `acting_text` using strict SSML tags.
+1. THE HOOK (0-3s): First line MUST drop a bizarre paradox, an impossible fact, or a terrifying anomaly immediately. Make them NEED to know the answer.
+2. RUTHLESS BREVITY (CRITICAL): Do not artificially stretch the video to 60 seconds. High completion rate is king. Keep the ENTIRE script under 85 words. Deliver maximum mystery with minimum words. Be incredibly punchy and to the point.
+3. OPEN LOOPS: Ask a compelling question early on, but delay the answer until the very end to force watch-time.
+4. THE PERFECT LOOP: The script MUST end abruptly on a cliffhanger that grammatically flows perfectly back into the first line of the video.
+5. SSML MICRO-DIRECTION: Engineer the `acting_text` using strict SSML tags.
    - Use <prosody rate="slow" pitch="-2st" volume="soft"> for creepy lines.
    - Use <prosody rate="fast" pitch="+1st" volume="loud"> for urgent panics.
-   - Use <break time="800ms"/> for dramatic pauses.
-5. CASTING: Choose ONE specific voice model: "Charon" (gritty male), "Fenrir" (intense male), "Aoede" (haunting female), or "Kore" (unsettling female).
-6. VISUAL KEYWORDS: Invent highly specific visual keywords for EVERY line to ensure high-quality B-roll fetching.
-7. YOUTUBE SEO (ENGAGEMENT DRIVER):
+   - Use <break time="800ms"/> for dramatic pauses (Use these strategically, don't over-pause).
+6. CASTING: Choose ONE specific voice model: "Charon" (gritty male), "Fenrir" (intense male), "Aoede" (haunting female), or "Kore" (unsettling female).
+7. VISUAL KEYWORDS: Invent highly specific visual keywords for EVERY line to ensure high-quality B-roll fetching.
+8. YOUTUBE SEO (ENGAGEMENT DRIVER):
    - title: Under 50 chars, Curiosity Gap, ends with #shorts #mystery.
    - case_name: Provide the actual historical name of the event/case to log it.
    - description: 3 lines of high-volume SEO keywords.
@@ -486,9 +487,6 @@ def upload_to_youtube(file_path, metadata):
         ).execute()
         print("✅ YouTube Upload Successful")
         
-        # NOTE: Automatically pinning comments via API requires advanced scopes and multi-step requests.
-        # Placing the "comment hook" inside the description achieves a similar viewer-prompting effect.
-        
         return True
     except Exception as e:
         print(f"❌ YouTube Upload failed: {e}")
@@ -538,3 +536,4 @@ if __name__ == "__main__":
         cleanup_files(video_path)
         
     print("🎉 Daily GhostBot execution finished!")
+
