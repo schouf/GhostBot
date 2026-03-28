@@ -16,9 +16,10 @@ class VoiceEngine:
         self.client = genai.Client(api_key=self.api_key)
 
         try:
-            from chatterbox.tts_turbo import ChatterboxTurboTTS
-            print("🧠 Loading Chatterbox Turbo on CPU...")
-            self.chatterbox = ChatterboxTurboTTS.from_pretrained(device="cpu")
+            # THE FIX: Importing the flagship 1B parameter model, NOT the stripped-down Turbo version
+            from chatterbox.tts import ChatterboxTTS
+            print("🧠 Loading FULL Chatterbox 1B Model on CPU (Prioritizing Quality over Speed)...")
+            self.chatterbox = ChatterboxTTS.from_pretrained(device="cpu")
         except Exception as e:
             print(f"⚠️ Chatterbox initialization failed: {e}. Will use Gemini TTS fallback.")
             self.chatterbox = None
@@ -39,7 +40,7 @@ class VoiceEngine:
         print(f"🎙️ Rendering [{voice_name}] | Vibe: {style_instruction}")
 
         # ==========================================
-        # ATTEMPT 1: CHATTERBOX TURBO (Expressive Cloning)
+        # ATTEMPT 1: FULL CHATTERBOX (Expressive Cloning)
         # ==========================================
         if self.chatterbox:
             try:
