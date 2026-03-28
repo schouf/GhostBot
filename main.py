@@ -63,7 +63,6 @@ def get_past_topics():
         return ""
     with open(TOPICS_FILE, "r", encoding="utf-8") as f:
         topics = f.read().splitlines()
-    # Keep the last 100 cases to ensure a massive buffer against repetition
     return "\n".join(topics[-100:])
 
 def save_new_topic(case_name):
@@ -123,11 +122,15 @@ STRICT STORYTELLING & VIRAL RULES:
 2. RUTHLESS BREVITY (CRITICAL): Do not artificially stretch the video to 60 seconds. High completion rate is king. Keep the ENTIRE script under 85 words. Deliver maximum mystery with minimum words. Be incredibly punchy and to the point.
 3. OPEN LOOPS: Ask a compelling question early on, but delay the answer until the very end to force watch-time.
 4. THE PERFECT LOOP: The script MUST end abruptly on a cliffhanger that grammatically flows perfectly back into the first line of the video.
-5. SSML MICRO-DIRECTION: Engineer the `acting_text` using strict SSML tags.
-   - Use <prosody rate="slow" pitch="-2st" volume="soft"> for creepy lines.
-   - Use <prosody rate="fast" pitch="+1st" volume="loud"> for urgent panics.
-   - Use <break time="800ms"/> for dramatic pauses (Use these strategically, don't over-pause).
-6. CASTING: Choose ONE specific voice model: "Charon" (gritty male), "Fenrir" (intense male), "Aoede" (haunting female), or "Kore" (unsettling female).
+
+VOICE ACTING & EXPRESSION DIRECTION (CRITICAL FOR REALISM):
+- recommended_voice_model: Choose ONE specific voice model: "Charon" (gritty male), "Fenrir" (intense male), "Aoede" (haunting female), or "Kore" (unsettling female).
+- style_instruction: A short note on the vibe (e.g., "Hushed, terrified whisper as if telling a dangerous secret.")
+- EXPRESSION TAGS: Instead of robotic SSML, you MUST use natural paralinguistic tags placed directly in the `acting_text`.
+- Allowed tags: [breath], [pause], [sigh], [laugh], [clears throat].
+- Example: "[breath] He walked into the room... [pause] and vanished. [sigh]"
+- Keep the `clean_text` completely free of these bracketed tags.
+
 7. VISUAL KEYWORDS: Invent highly specific visual keywords for EVERY line to ensure high-quality B-roll fetching.
 8. YOUTUBE SEO (ENGAGEMENT DRIVER):
    - title: Under 50 chars, Curiosity Gap, ends with #shorts #mystery.
@@ -147,7 +150,7 @@ Return ONLY valid JSON in this format:
   "lines": [
     {{
       "style_instruction": "Hushed, terrified whisper as if telling a dangerous secret.",
-      "acting_text": "<prosody volume='soft' rate='slow'>He walked into the room...</prosody> <break time='1s'/> <emphasis level='strong'>and vanished.</emphasis>",
+      "acting_text": "[breath] He walked into the room... [pause] and vanished.",
       "clean_text": "He walked into the room and vanished.",
       "visual_keyword": "muddy footprints on carpet"
     }}
@@ -295,7 +298,6 @@ def get_visual_clip(keyword, filename, duration):
                 f.write(requests.get(link).content)
 
             clip = VideoFileClip(filename)
-            # CRITICAL FIX: Strip Pexels raw audio to prevent bleed-through over TTS
             clip = clip.without_audio()
             
             if clip.duration < duration:
@@ -337,7 +339,7 @@ def add_dynamic_subtitles(video_clip, audio_path):
                     font='Impact',
                     method='caption',
                     size=(video_clip.w * 0.9, None)
-                ).set_start(word.start).set_end(word.end).set_position(('center', video_clip.h * 0.70)) # Adjusted to UI Safe Zone
+                ).set_start(word.start).set_end(word.end).set_position(('center', video_clip.h * 0.70))
                 
                 subtitle_clips.append(txt_clip)
             except Exception as e:
@@ -378,6 +380,7 @@ def main_pipeline():
 
             wav_file = voice_engine.generate_acting_line(
                 acting_text=acting_input, 
+                clean_text=clean_text, 
                 style_instruction=style_instruction,
                 index=i, 
                 voice_name=target_voice
@@ -387,6 +390,7 @@ def main_pipeline():
                 continue
 
             audio_clip = AudioFileClip(wav_file)
+            # Ensure SFX map uses the clean text so paralinguistic tags don't accidentally trigger sounds
             audio_clip = add_sfx(audio_clip, clean_text)
 
             video_file = f"temp_vid_{i}.mp4"
@@ -395,10 +399,11 @@ def main_pipeline():
             clip = clip.fx(colorx, 0.85).set_audio(audio_clip)
 
             if i > 0:
+                # FIXED: Force sequential playback to prevent the 7-second cutoff!
+                clip = clip.set_start(final_clips[-1].end)
+                
                 if random.random() < 0.2:
                     clip = clip.fadein(0.1, color=[255,255,255]) 
-                else:
-                    clip = clip.set_start(final_clips[-1].end)
             
             final_clips.append(clip)
 
@@ -419,7 +424,6 @@ def main_pipeline():
         os.remove(temp_voice_track)
 
     try:
-        # Puts watermark slightly lower to avoid overlapping with top-screen interactions
         watermark = TextClip(
             CHANNEL_HANDLE, 
             fontsize=40, 
@@ -466,7 +470,6 @@ def upload_to_youtube(file_path, metadata):
         creds = Credentials.from_authorized_user_info(json.loads(YOUTUBE_TOKEN_VAL))
         youtube = build("youtube", "v3", credentials=creds)
         
-        # Combine base description with the auto-generated pinned comment hook
         full_description = f"{metadata['description']}\n\n{metadata.get('pinned_comment', '')}"
 
         youtube.videos().insert(
@@ -520,7 +523,6 @@ if __name__ == "__main__":
         upload_success = upload_to_youtube(video_path, metadata)
         
         if upload_success:
-            # Safely get the case_name, fallback to title if the AI formats weirdly
             case_to_save = metadata.get('case_name', metadata['title'])
             save_new_topic(case_to_save)
             
@@ -536,4 +538,3 @@ if __name__ == "__main__":
         cleanup_files(video_path)
         
     print("🎉 Daily GhostBot execution finished!")
-
