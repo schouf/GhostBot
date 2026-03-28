@@ -119,7 +119,7 @@ Do not invent a fake story; use a real, documented case, historical event, or wi
 
 STRICT STORYTELLING & VIRAL RULES:
 1. THE HOOK (0-3s): First line MUST drop a bizarre paradox, an impossible fact, or a terrifying anomaly immediately. Make them NEED to know the answer.
-2. RUTHLESS BREVITY (CRITICAL): Do not artificially stretch the video to 60 seconds. High completion rate is king. Keep the ENTIRE script under 85 words. Deliver maximum mystery with minimum words. Be incredibly punchy and to the point.
+2. NATURAL PACING & STORYTELLING: Do not restrict yourself to a specific word count. Write a compelling, immersive story. Focus on building suspense, atmosphere, and a terrifying narrative arc that keeps the viewer hooked from the first second to the last. Take the time needed to explain the creepy details.
 3. OPEN LOOPS: Ask a compelling question early on, but delay the answer until the very end to force watch-time.
 4. THE PERFECT LOOP: The script MUST end abruptly on a cliffhanger that grammatically flows perfectly back into the first line of the video.
 
@@ -131,17 +131,17 @@ VOICE ACTING & EXPRESSION DIRECTION (CRITICAL FOR REALISM):
 - Example: "[breath] He walked into the room... [pause] and vanished. [sigh]"
 - Keep the `clean_text` completely free of these bracketed tags.
 
-7. VISUAL KEYWORDS: Invent highly specific visual keywords for EVERY line to ensure high-quality B-roll fetching.
-8. YOUTUBE SEO (ENGAGEMENT DRIVER):
-   - title: Under 50 chars, Curiosity Gap, ends with #shorts #mystery.
-   - case_name: Provide the actual historical name of the event/case to log it.
-   - description: 3 lines of high-volume SEO keywords.
-   - pinned_comment: Write a provocative, engaging question related to the case that the channel owner will pin to drive massive comments.
-   - tags: Exactly 15 highly searched tags (mix of broad and long-tail).
+VISUAL KEYWORDS & SEO:
+- visual_keyword: Invent highly specific visual keywords for EVERY line to ensure high-quality B-roll fetching.
+- title: Write a highly engaging, curiosity-inducing title. End with #shorts #mystery.
+- case_name: Provide the actual historical name of the event/case to log it.
+- description: 3 lines of high-volume SEO keywords.
+- pinned_comment: Write a provocative, engaging question related to the case that the channel owner will pin to drive massive comments.
+- tags: Exactly 15 highly searched tags (mix of broad and long-tail).
 
 Return ONLY valid JSON in this format:
 {{
-  "title": "They found WHAT in the walls? #shorts #mystery",
+  "title": "They found WHAT in the walls of this abandoned house? #shorts #mystery",
   "case_name": "The Discovery of the Somerton Man",
   "description": "Unsolved mysteries, scary stories, true crime documentary, bizarre historical events...",
   "pinned_comment": "If you found that note in your pocket, what would be your first move? Let me know 👇",
@@ -390,7 +390,6 @@ def main_pipeline():
                 continue
 
             audio_clip = AudioFileClip(wav_file)
-            # Ensure SFX map uses the clean text so paralinguistic tags don't accidentally trigger sounds
             audio_clip = add_sfx(audio_clip, clean_text)
 
             video_file = f"temp_vid_{i}.mp4"
@@ -399,9 +398,7 @@ def main_pipeline():
             clip = clip.fx(colorx, 0.85).set_audio(audio_clip)
 
             if i > 0:
-                # FIXED: Force sequential playback to prevent the 7-second cutoff!
                 clip = clip.set_start(final_clips[-1].end)
-                
                 if random.random() < 0.2:
                     clip = clip.fadein(0.1, color=[255,255,255]) 
             
