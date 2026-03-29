@@ -126,10 +126,13 @@ STRICT STORYTELLING & VIRAL RULES:
 VOICE ACTING & EXPRESSION DIRECTION (CRITICAL FOR REALISM):
 - recommended_voice_model: Choose ONE specific voice model: "Charon" (gritty male), "Fenrir" (intense male), "Aoede" (haunting female), or "Kore" (unsettling female).
 - style_instruction: A short note on the vibe (e.g., "Hushed, terrified whisper as if telling a dangerous secret.")
-- EXPRESSION TAGS: Instead of robotic SSML, you MUST use natural paralinguistic tags placed directly in the `acting_text`.
-- Allowed tags: [breath], [pause], [sigh], [laugh], [clears throat].
-- Example: "[breath] He walked into the room... [pause] and vanished. [sigh]"
-- Keep the `clean_text` completely free of these bracketed tags.
+- EXPRESSION TAGS (SSML): You MUST use highly detailed, rich SSML tags inside `acting_text` to force the AI Voice Actor to pace itself perfectly. True Crime requires dramatic pauses and shifts in pitch.
+- Allowed tags: 
+  - <break time="0.5s"/> to <break time="2.0s"/> for suspenseful pauses.
+  - <emphasis level="strong"> for shocking words.
+  - <prosody rate="slow" pitch="low"> for dark, creeping explanations.
+- Example: "<prosody rate='slow' pitch='low'>He walked into the room...</prosody> <break time='1.5s'/> and <emphasis level='strong'>vanished</emphasis>."
+- Keep the `clean_text` completely free of these XML tags.
 
 VISUAL KEYWORDS & SEO:
 - visual_keyword: Invent highly specific visual keywords for EVERY line to ensure high-quality B-roll fetching.
@@ -150,7 +153,7 @@ Return ONLY valid JSON in this format:
   "lines": [
     {{
       "style_instruction": "Hushed, terrified whisper as if telling a dangerous secret.",
-      "acting_text": "[breath] He walked into the room... [pause] and vanished.",
+      "acting_text": "<prosody rate='slow' pitch='low'>He walked into the room...</prosody> <break time='1.5s'/> and <emphasis level='strong'>vanished</emphasis>.",
       "clean_text": "He walked into the room and vanished.",
       "visual_keyword": "muddy footprints on carpet"
     }}
