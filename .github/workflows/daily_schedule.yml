@@ -1,5 +1,4 @@
 name: Daily GhostBot Upload
-
 on:
   schedule:
     - cron: '0 6,18 * * *'
@@ -7,13 +6,12 @@ on:
 
 concurrency:
   group: ghostbot-upload
-  cancel-in-progress: false 
+  cancel-in-progress: false
 
 jobs:
   run_bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 360 
-    
+    timeout-minutes: 360
     permissions:
       contents: write
 
@@ -33,21 +31,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg libsndfile1 sox imagemagick fonts-liberation ghostscript \
-                                  libwebp-dev libjpeg-dev zlib1g-dev libfreetype6-dev
+                                   libwebp-dev libjpeg-dev zlib1g-dev libfreetype6-dev
           
-          # Loosens ImageMagick security policies to prevent MoviePy text/image generation crashes
-          sudo sed -i '/<policy domain="path" rights="none" pattern="@\*"/d' /etc/ImageMagick-6/policy.xml || true
+          sudo sed -i '/<policy domain="path" rights="none" pattern="@*"/d' /etc/ImageMagick-6/policy.xml || true
           
-          # Prevents Error 13 (Permission denied) when saving dynamic assets
-          mkdir -p assets temp images downloads
-          chmod -R 777 assets temp images downloads
+          mkdir -p assets temp images downloads sfx music
+          chmod -R 777 assets temp images downloads sfx music
 
       - name: Install Python Libraries
         run: |
           python -m pip install --upgrade pip
           pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
           
-          # Ensures libraries required for the new dynamic visual effects are explicitly installed
           pip install google-api-python-client requests Pillow scipy moviepy opencv-python-headless imageio[ffmpeg] imageio[pyav]
           
           pip install -r requirements.txt
@@ -61,30 +56,39 @@ jobs:
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
-          
-          # Standardized the Google Search API key name
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
           GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
+          HF_API_KEY: ${{ secrets.HF_API_KEY }}
         run: python main.py
 
       - name: Debug Visuals (Verify Image Downloads)
         if: always()
         run: |
           echo "=== CHECKING DOWNLOADED/GENERATED IMAGES ==="
-          ls -la assets temp images downloads 2>/dev/null || true
-          file assets/* temp/* images/* downloads/* 2>/dev/null || true
+          ls -lh temp_img_*.jpg 2>/dev/null || echo "No temp images found"
+          
+          echo "=== CHECKING FILE TYPES ==="
+          file temp_img_*.jpg 2>/dev/null || true
+          
+          echo "=== CHECKING IMAGE SIZES ==="
+          for img in temp_img_*.jpg; do
+            if [ -f "$img" ]; then
+              size=$(stat -c%s "$img" 2>/dev/null)
+              echo "$img: $size bytes"
+            fi
+          done
 
       - name: Commit and Push Memory Bank Updates
         if: success()
         run: |
           git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com" 
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add topics.txt
           
           if git diff --staged --quiet; then
             echo "No changes in topics.txt to commit."
           else
             git commit -m "chore: update topics memory bank [skip ci]"
-            git pull --rebase origin main || true 
+            git pull --rebase origin main || true
             git push
           fi
