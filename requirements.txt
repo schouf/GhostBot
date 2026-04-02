@@ -9,3 +9,6 @@ google-auth-oauthlib
 requests
 soundfile
 faster-whisper
+opencv-python-headless
+imageio[ffmpeg]
+imageio[pyav]
