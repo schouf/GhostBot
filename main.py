@@ -28,7 +28,9 @@ import meta_upload
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY") 
 PEXELS_KEY = os.environ.get("PEXELS_API_KEY")
-GOOGLE_SEARCH_API_KEY = os.environ.get("GOOGLE_SEARCH_API_KEY")
+
+# Standardized API Key Name
+SEARCH_API_KEY = os.environ.get("SEARCH_API_KEY")
 GOOGLE_CSE_ID = os.environ.get("GOOGLE_CSE_ID")
 YOUTUBE_TOKEN_VAL = os.environ.get("YOUTUBE_TOKEN_JSON")
 
@@ -293,64 +295,85 @@ def fetch_ai_image(prompt, filename):
     full_prompt = f"{prompt}, highly detailed, photorealistic, dark cinematic lighting, eerie true crime documentary style, 8k resolution"
     encoded_prompt = urllib.parse.quote(full_prompt)
     url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1080&height=1920&nologo=true"
-    r = requests.get(url)
-    if r.status_code == 200:
-        with open(filename, "wb") as f:
-            f.write(r.content)
-        return True
+    
+    # User-Agent to prevent 403 blocks from Pollinations
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+    
+    try:
+        r = requests.get(url, headers=headers, timeout=30)
+        if r.status_code == 200:
+            with open(filename, "wb") as f:
+                f.write(r.content)
+            return True
+    except Exception as e:
+        print(f"⚠️ Error fetching AI image: {e}")
     return False
+
+def verify_and_convert_image(filename):
+    """Prevents MoviePy crashes by ensuring the file is a valid RGB JPEG (Fixes WebP/RGBA bugs)"""
+    try:
+        # Step 1: Verify it is actually an image and not an HTML error page
+        with PIL.Image.open(filename) as img:
+            img.verify()
+        
+        # Step 2: Convert transparent/WebP formats to standard RGB for MoviePy compatibility
+        with PIL.Image.open(filename) as img:
+            if img.mode in ('RGBA', 'P', 'LA'):
+                img = img.convert('RGB')
+            img.save(filename, format='JPEG')
+        return True
+    except Exception as e:
+        print(f"⚠️ Invalid or corrupted image {filename}: {e}")
+        return False
 
 def get_image_clip(keyword, duration, index):
     """Fetches real historical images or SOTA AI images and applies Alternating Ken Burns."""
     img_filename = f"temp_img_{index}.jpg"
     success = False
     
-    # PATH A: SOTA AI Image Generation
     if keyword.startswith("AI_GEN:"):
         clean_prompt = keyword.replace("AI_GEN:", "").strip()
         print(f"🪄 Generating SOTA AI Image: {clean_prompt[:40]}...")
         success = fetch_ai_image(clean_prompt, img_filename)
         
-    # PATH B: Real Evidence (Google Image Search)
     else:
         print(f"🔍 Searching Google for Evidence: {keyword}")
-        if GOOGLE_SEARCH_API_KEY and GOOGLE_CSE_ID:
+        if SEARCH_API_KEY and GOOGLE_CSE_ID:
             url = "https://www.googleapis.com/customsearch/v1"
             params = {
                 "q": f"{keyword} real historical photo evidence", 
-                "cx": GOOGLE_CSE_ID, "key": GOOGLE_SEARCH_API_KEY,
+                "cx": GOOGLE_CSE_ID, "key": SEARCH_API_KEY,
                 "searchType": "image", "num": 1, "safe": "active"
             }
             try:
                 r = requests.get(url, params=params).json()
                 if "items" in r:
                     img_url = r["items"][0]["link"]
+                    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                    img_data = requests.get(img_url, headers=headers, timeout=15).content
                     with open(img_filename, "wb") as f:
-                        f.write(requests.get(img_url).content)
+                        f.write(img_data)
                     success = True
                 else:
                     print("⚠️ No Google results found. Falling back to AI Image...")
             except Exception as e:
                 print(f"⚠️ Google API error: {e}")
         
-        # SOTA Fallback if Google fails to find the historical photo
         if not success:
             success = fetch_ai_image(keyword, img_filename)
 
-    # Absolute fallback (Black screen) if both APIs completely fail
-    if not success or not os.path.exists(img_filename):
+    # Validate image integrity before passing to MoviePy
+    if not success or not os.path.exists(img_filename) or not verify_and_convert_image(img_filename):
+        print(f"⚠️ Image generation failed entirely. Using Black fallback for index {index}")
         return ColorClip(size=(1080, 1920), color=(15, 15, 15), duration=duration)
 
-    # APPLY ALTERNATING KEN BURNS EFFECT
     try:
         clip = ImageClip(img_filename).set_duration(duration)
         
-        # Ensure image completely fills the 9:16 vertical frame
         clip = clip.resize(height=1920)
         if clip.w < 1080: clip = clip.resize(width=1080)
         clip = clip.crop(x_center=clip.w/2, y_center=clip.h/2, width=1080, height=1920)
         
-        # Alternating Zoom: Evens zoom IN, Odds zoom OUT to prevent visual fatigue
         if index % 2 == 0:
             zoom_func = lambda t: 1 + 0.05 * (t / duration)
         else:
@@ -420,7 +443,7 @@ def main_pipeline():
     print(f"🎙️ AI Casted Narrator: {target_voice}")
     
     final_clips = []
-    global_img_index = 0 # Keeps track for the alternating Ken Burns effect
+    global_img_index = 0
 
     for i, line in enumerate(script["lines"]):
         try:
@@ -428,7 +451,6 @@ def main_pipeline():
             style_instruction = line.get("style_instruction", "Serious and highly suspenseful.")
             clean_text = line.get("clean_text", line.get("text", ""))
             
-            # Extract the array of visuals generated by the AI Director
             visuals_list = line.get("visuals", ["AI_GEN: dark cinematic eerie background"])
 
             wav_file = voice_engine.generate_acting_line(
@@ -445,16 +467,12 @@ def main_pipeline():
             audio_clip = AudioFileClip(wav_file)
             audio_clip = add_sfx(audio_clip, clean_text)
 
-            # --- THE DYNAMIC VISUAL SLICER ---
             line_visual_clips = []
-            
-            # Divide the duration of the audio clip by the number of generated visuals
             duration_per_image = audio_clip.duration / max(1, len(visuals_list))
             
             for vis_keyword in visuals_list:
                 img_clip = get_image_clip(vis_keyword, duration_per_image, global_img_index)
                 
-                # Sequence the sub-clips within this single audio line
                 if len(line_visual_clips) > 0:
                     img_clip = img_clip.set_start(line_visual_clips[-1].end)
                 else:
@@ -463,13 +481,9 @@ def main_pipeline():
                 line_visual_clips.append(img_clip)
                 global_img_index += 1
 
-            # Combine all sliced visuals into one video clip that matches the exact length of the audio line
             line_video = CompositeVideoClip(line_visual_clips).set_duration(audio_clip.duration)
-            
-            # Apply your true crime color grading and attach the audio
             line_video = line_video.fx(colorx, 0.85).set_audio(audio_clip)
 
-            # Sequence the master timeline
             if len(final_clips) > 0:
                 line_video = line_video.set_start(final_clips[-1].end)
             
