@@ -23,11 +23,16 @@ import meta_upload
 # ================== CONFIG ==================
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY")
-PEXELS_KEY = os.environ.get("PEXELS_API_KEY")
 SEARCH_API_KEY = os.environ.get("SEARCH_API_KEY")
 GOOGLE_CSE_ID = os.environ.get("GOOGLE_CSE_ID")
-HF_API_KEY = os.environ.get("HF_API_KEY", "")  # Optional
 YOUTUBE_TOKEN_VAL = os.environ.get("YOUTUBE_TOKEN_JSON")
+
+# TITANIUM PIPELINE KEYS
+SILICONFLOW_KEY = os.environ.get("SILICONFLOW_API_KEY")
+CF_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
+CF_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN")
+PEXELS_KEY = os.environ.get("PEXELS_API_KEY")
+
 CHANNEL_HANDLE = "@TheGlitchArchive"
 TOPICS_FILE = "topics.txt"
 
@@ -234,7 +239,6 @@ RULES:
 """
 
     try:
-        # FIXED: Removed the invalid timeout parameter. Added config explicitly.
         config = types.GenerateContentConfig(temperature=0.7)
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt, config=config)
         print("✅ Meta Caption generated successfully with Gemini!")
@@ -280,160 +284,126 @@ def add_sfx(audio_clip, text):
                     pass
     return audio_clip
 
-# ================== DYNAMIC VISUAL FETCH (6-LAYER FALLBACK) ==================
+# ================== TITANIUM IMAGE FETCHING PIPELINE ==================
 
-def fetch_ai_image(prompt, filename):
-    """Layer 2: Pollinations.ai - FLUX.1"""
-    full_prompt = f"{prompt}, highly detailed, photorealistic, dark cinematic lighting, eerie true crime documentary style, 8k resolution"
-    encoded_prompt = urllib.parse.quote(full_prompt)
-    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={VIDEO_WIDTH}&height={VIDEO_HEIGHT}&nologo=true"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-
-    try:
-        r = requests.get(url, headers=headers, timeout=30)
-        if r.status_code == 200:
-            with open(filename, "wb") as f:
-                f.write(r.content)
-            return True
-    except Exception as e:
-        print(f"⚠️ Pollinations.ai error: {e}")
-    return False
-
-def fetch_puter_image(prompt, filename):
-    """Layer 3: Puter.js - FREE UNLIMITED SOTA Models"""
-    print(f"🌐 [3/6] Puter.js (FREE UNLIMITED - FLUX/Imagen4): {prompt[:40]}...")
-    url = "https://api.puter.com/ai/img/generate"
-    payload = {
-        "model": "flux",
-        "prompt": f"{prompt}, photorealistic, dark cinematic lighting, true crime documentary style, highly detailed, 8k, vertical",
-        "n": 1,
-        "size": f"{VIDEO_WIDTH}x{VIDEO_HEIGHT}"
-    }
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    }
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=45)
-        if response.status_code == 200:
-            data = response.json()
-            if 'images' in data and len(data['images']) > 0:
-                img_data = base64.b64decode(data['images'][0])
-                with open(filename, "wb") as f:
-                    f.write(img_data)
-                if os.path.getsize(filename) > 1000:
-                    print("✅ Puter.js image generated successfully!")
-                    return True
-        print(f"⚠️ Puter.js returned: {response.status_code}")
-        return False
-    except Exception as e:
-        print(f"⚠️ Puter.js error: {e}")
-        return False
-
-def fetch_ai_horde_image(prompt, filename):
-    """Layer 4: AI Horde - FREE Community-Powered"""
-    print(f"👥 [4/6] AI Horde (FREE - SDXL/Stable Cascade): {prompt[:40]}...")
-    url = "https://stablehorde.net/api/v2/generate/async"
-    headers = {
-        "apikey": "0000000000",
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Client-Agent": "GhostBot:1.0.0"
-    }
-    payload = {
-        "prompt": f"{prompt}, photorealistic, dark cinematic, true crime, highly detailed, 8k",
-        "params": {
-            "steps": 25,
-            "width": VIDEO_WIDTH,
-            "height": VIDEO_HEIGHT,
-            "sampler_name": "DPM++ 2M Karras",
-            "cfg_scale": 7.5,
-            "denoising_strength": 0.75
-        },
-        "models": ["SDXL 1.0"],
-        "nsfw": False,
-        "censor_nsfw": False
-    }
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        if response.status_code != 202:
-            print(f"⚠️ AI Horde request failed: {response.status_code}")
-            return False
-        job_data = response.json()
-        job_id = job_data.get('id')
-        if not job_id:
-            print("⚠️ No job ID returned from AI Horde")
-            return False
-        
-        print(f"⏳ AI Horde job submitted (ID: {job_id}). Waiting...")
-        for attempt in range(30):
-            time.sleep(3)
-            check_url = f"https://stablehorde.net/api/v2/generate/check/{job_id}"
-            check_response = requests.get(check_url, headers=headers, timeout=15)
-            if check_response.status_code == 200:
-                status = check_response.json()
-                if status.get('done', False):
-                    print("✅ AI Horde generation complete! Fetching image...")
-                    result_url = f"https://stablehorde.net/api/v2/generate/status/{job_id}"
-                    result_response = requests.get(result_url, headers=headers, timeout=15)
-                    if result_response.status_code == 200:
-                        result_data = result_response.json()
-                        if 'generations' in result_data and len(result_data['generations']) > 0:
-                            img_url = result_data['generations'][0]['img']
-                            img_response = requests.get(img_url, timeout=20)
-                            if img_response.status_code == 200:
-                                with open(filename, "wb") as f:
-                                    f.write(img_response.content)
-                                if os.path.getsize(filename) > 1000:
-                                    print(f"✅ AI Horde image downloaded successfully!")
-                                    return True
-        print("⏱️ AI Horde generation timed out")
-        return False
-    except Exception as e:
-        print(f"⚠️ AI Horde error: {e}")
-        return False
-
-def fetch_huggingface_image(prompt, filename):
-    """Layer 5: Hugging Face Inference API (Fixed to use FLUX Schnell without license block)"""
-    print(f"🤗 [5/6] Hugging Face (FLUX Schnell): {prompt[:40]}...")
+def fetch_siliconflow_image(prompt, filename):
+    """Layer 2: SiliconFlow (SOTA AI - FLUX.1)"""
+    print(f"🌊 [2/5] SiliconFlow (FLUX.1): {prompt[:40]}...")
     
-    if not HF_API_KEY:
-        print("⚠️ HF_API_KEY is missing! Hugging Face API requires authentication to prevent 401/410 blocks.")
+    if not SILICONFLOW_KEY:
+        print("⚠️ SILICONFLOW_API_KEY missing. Skipping.")
         return False
 
-    model_id = "black-forest-labs/FLUX.1-schnell"
-    url = f"https://api-inference.huggingface.co/models/{model_id}"
-    
+    url = "https://api.siliconflow.cn/v1/images/generations"
     headers = {
-        "Authorization": f"Bearer {HF_API_KEY}",
+        "Authorization": f"Bearer {SILICONFLOW_KEY}",
         "Content-Type": "application/json"
     }
     
     payload = {
-        "inputs": f"{prompt}, photorealistic, dark cinematic lighting, true crime documentary style",
+        "model": "black-forest-labs/FLUX.1-schnell",
+        "prompt": f"{prompt}, photorealistic, dark cinematic lighting, highly detailed true crime documentary style, 8k resolution",
+        "image_size": "768x1024",
+        "batch_size": 1
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response = requests.post(url, headers=headers, json=payload, timeout=45)
+        if response.status_code == 200:
+            data = response.json()
+            if 'images' in data and len(data['images']) > 0:
+                img_url = data['images'][0]['url']
+                img_data = requests.get(img_url, timeout=20).content
+                
+                with open(filename, "wb") as f:
+                    f.write(img_data)
+                    
+                if os.path.getsize(filename) > 1000:
+                    print("✅ SiliconFlow image generated successfully!")
+                    return True
+        else:
+            print(f"⚠️ SiliconFlow API returned: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"⚠️ SiliconFlow error: {e}")
         
+    return False
+
+def fetch_cloudflare_image(prompt, filename):
+    """Layer 3: Cloudflare Workers AI (Unkillable Edge API)"""
+    print(f"☁️ [3/5] Cloudflare (FLUX.1): {prompt[:40]}...")
+    
+    if not CF_ACCOUNT_ID or not CF_API_TOKEN:
+        print("⚠️ Cloudflare credentials missing. Skipping.")
+        return False
+
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell"
+    headers = {
+        "Authorization": f"Bearer {CF_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "prompt": f"{prompt}, dark cinematic, true crime, highly detailed, vertical video format"
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=45)
         if response.status_code == 200:
             with open(filename, "wb") as f:
                 f.write(response.content)
-            
+                
             if os.path.getsize(filename) > 1000:
-                print("✅ Hugging Face image generated successfully!")
+                print("✅ Cloudflare image generated successfully!")
                 return True
         else:
-            print(f"⚠️ HF API returned: {response.status_code} - {response.text}")
-            
+            print(f"⚠️ Cloudflare API returned: {response.status_code}")
     except Exception as e:
-        print(f"⚠️ Hugging Face error: {e}")
+        print(f"⚠️ Cloudflare error: {e}")
+        
+    return False
+
+def fetch_pexels_image(prompt, filename):
+    """Layer 4: Pexels HD Stock Image"""
+    print(f"📷 [4/5] Pexels (Stock): {prompt[:40]}...")
+    if not PEXELS_KEY:
+        print("⚠️ PEXELS_API_KEY missing. Skipping.")
+        return False
+
+    url = "https://api.pexels.com/v1/search"
+    
+    # Clean the prompt of AI jargon so Pexels can understand it
+    clean_search = prompt.replace("photorealistic", "").replace("highly detailed", "").replace("dark cinematic lighting", "").strip()
+    
+    # Grab the first 3-5 core words so the search isn't too restrictive
+    search_query = " ".join(clean_search.split()[:5])
+
+    headers = {"Authorization": PEXELS_KEY}
+    params = {"query": search_query, "per_page": 3, "orientation": "portrait"}
+
+    try:
+        r = requests.get(url, headers=headers, params=params, timeout=30)
+        if r.status_code == 200:
+            data = r.json()
+            if "photos" in data and len(data["photos"]) > 0:
+                img_url = data["photos"][0]["src"]["large2x"]
+                img_data = requests.get(img_url, timeout=20).content
+                
+                with open(filename, "wb") as f:
+                    f.write(img_data)
+                    
+                if os.path.getsize(filename) > 1000:
+                    print("✅ Pexels image downloaded successfully!")
+                    return True
+        else:
+            print(f"⚠️ Pexels API returned: {r.status_code}")
+    except Exception as e:
+        print(f"⚠️ Pexels error: {e}")
         
     return False
 
 def fetch_placeholder_image(keyword, filename):
-    """Layer 6: Emergency Placeholder (Guaranteed to work)"""
-    print(f"🚨 [6/6] EMERGENCY: Creating placeholder image...")
+    """Layer 5: Emergency Placeholder (Guaranteed to work)"""
+    print(f"🚨 [5/5] EMERGENCY: Creating placeholder image...")
     try:
         from PIL import Image, ImageDraw, ImageFont
         img = Image.new('RGB', (VIDEO_WIDTH, VIDEO_HEIGHT), color=(10, 10, 20))
@@ -443,6 +413,7 @@ def fetch_placeholder_image(keyword, filename):
             g = int(10 + (y / VIDEO_HEIGHT) * 20)
             b = int(20 + (y / VIDEO_HEIGHT) * 40)
             draw.line([(0, y), (VIDEO_WIDTH, y)], fill=(r, g, b))
+        
         words = keyword.replace("AI_GEN:", "").replace("real historical photo", "").strip()[:60]
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/msttcorefonts/Impact.ttf", 48)
@@ -450,9 +421,11 @@ def fetch_placeholder_image(keyword, filename):
         except:
             font = ImageFont.load_default()
             small_font = font
+            
         draw.text((VIDEO_WIDTH//2, VIDEO_HEIGHT//2 - 50), "MYSTERY", fill=(255, 215, 0), font=font, anchor="mm")
         draw.text((VIDEO_WIDTH//2, VIDEO_HEIGHT//2 + 50), words, fill=(200, 200, 200), font=small_font, anchor="mm")
         draw.text((VIDEO_WIDTH//2, VIDEO_HEIGHT//2 + 150), "⚫ ◼️ ", fill=(100, 100, 100), font=font, anchor="mm")
+        
         img.save(filename, "JPEG", quality=95)
         print("✅ Placeholder image created!")
         return True
@@ -475,14 +448,16 @@ def verify_and_convert_image(filename):
         return False
 
 def get_image_clip(keyword, duration, index):
-    """Fetches images with 6 layers of fallback to prevent black screens."""
+    """Titanium 5-Layer Image Fetching Pipeline"""
     img_filename = f"temp_img_{index}.jpg"
     success = False
     
     try:
+        clean_prompt = keyword.replace("AI_GEN:", "").strip() if keyword.startswith("AI_GEN:") else keyword
+
         # === LAYER 1: Google Custom Search ===
         if not keyword.startswith("AI_GEN:"):
-            print(f"🔍 [1/6] Searching Google for: {keyword[:50]}...")
+            print(f"🔍 [1/5] Searching Google for: {keyword[:50]}...")
             if SEARCH_API_KEY and GOOGLE_CSE_ID:
                 url = "https://www.googleapis.com/customsearch/v1"
                 params = {
@@ -514,29 +489,22 @@ def get_image_clip(keyword, duration, index):
                     print("⏱️ Google API timed out")
                 except Exception as e:
                     print(f"⚠️ Google API error: {e}")
-        
-        # === LAYER 2: Pollinations.ai ===
+        else:
+            print("⏭️ Skipping Google Search (AI_GEN requested)")
+
+        # === LAYER 2: SiliconFlow ===
         if not success:
-            clean_prompt = keyword.replace("AI_GEN:", "").strip() if keyword.startswith("AI_GEN:") else keyword
-            print(f"🪄 [2/6] Pollinations.ai (FLUX.1): {clean_prompt[:40]}...")
-            success = fetch_ai_image(clean_prompt, img_filename)
+            success = fetch_siliconflow_image(clean_prompt, img_filename)
         
-        # === LAYER 3: Puter.js ===
+        # === LAYER 3: Cloudflare ===
         if not success:
-            clean_prompt = keyword.replace("AI_GEN:", "").strip() if keyword.startswith("AI_GEN:") else keyword
-            success = fetch_puter_image(clean_prompt, img_filename)
-        
-        # === LAYER 4: AI Horde ===
+            success = fetch_cloudflare_image(clean_prompt, img_filename)
+            
+        # === LAYER 4: Pexels ===
         if not success:
-            clean_prompt = keyword.replace("AI_GEN:", "").strip() if keyword.startswith("AI_GEN:") else keyword
-            success = fetch_ai_horde_image(clean_prompt, img_filename)
+            success = fetch_pexels_image(clean_prompt, img_filename)
         
-        # === LAYER 5: Hugging Face ===
-        if not success:
-            clean_prompt = keyword.replace("AI_GEN:", "").strip() if keyword.startswith("AI_GEN:") else keyword
-            success = fetch_huggingface_image(clean_prompt, img_filename)
-        
-        # === LAYER 6: Emergency Placeholder ===
+        # === LAYER 5: Emergency Placeholder ===
         if not success:
             success = fetch_placeholder_image(keyword, img_filename)
         
@@ -603,7 +571,6 @@ def add_dynamic_subtitles(video_clip, audio_path):
                 
                 subtitle_clips.append(txt_clip)
             except Exception as e:
-                # FIXED: No longer failing silently. This will tell us if ImageMagick is still broken.
                 print(f"⚠️ Subtitle text rendering error for word '{clean_word}': {e}")
 
     print(f"✅ Generated {len(subtitle_clips)} word captions!")
