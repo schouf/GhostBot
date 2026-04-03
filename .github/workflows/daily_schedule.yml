@@ -33,7 +33,8 @@ jobs:
           sudo apt-get install -y ffmpeg libsndfile1 sox imagemagick fonts-liberation ghostscript \
                                    libwebp-dev libjpeg-dev zlib1g-dev libfreetype6-dev
           
-          sudo sed -i '/<policy domain="path" rights="none" pattern="@*"/d' /etc/ImageMagick-6/policy.xml || true
+          # BRUTE FORCE FIX: Remove ImageMagick policy completely to allow MoviePy text rendering
+          sudo rm -f /etc/ImageMagick-6/policy.xml
           
           mkdir -p assets temp images downloads sfx music
           chmod -R 777 assets temp images downloads sfx music
