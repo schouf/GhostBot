@@ -234,7 +234,9 @@ RULES:
 """
 
     try:
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt, timeout=30)
+        # FIXED: Removed the invalid timeout parameter. Added config explicitly.
+        config = types.GenerateContentConfig(temperature=0.7)
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt, config=config)
         print("✅ Meta Caption generated successfully with Gemini!")
         return response.text.strip()
     except Exception as e:
@@ -300,39 +302,30 @@ def fetch_ai_image(prompt, filename):
 def fetch_puter_image(prompt, filename):
     """Layer 3: Puter.js - FREE UNLIMITED SOTA Models"""
     print(f"🌐 [3/6] Puter.js (FREE UNLIMITED - FLUX/Imagen4): {prompt[:40]}...")
-    
     url = "https://api.puter.com/ai/img/generate"
-    
     payload = {
         "model": "flux",
         "prompt": f"{prompt}, photorealistic, dark cinematic lighting, true crime documentary style, highly detailed, 8k, vertical",
         "n": 1,
         "size": f"{VIDEO_WIDTH}x{VIDEO_HEIGHT}"
     }
-    
     headers = {
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
-    
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=45)
-        
         if response.status_code == 200:
             data = response.json()
             if 'images' in data and len(data['images']) > 0:
                 img_data = base64.b64decode(data['images'][0])
-                
                 with open(filename, "wb") as f:
                     f.write(img_data)
-                
                 if os.path.getsize(filename) > 1000:
                     print("✅ Puter.js image generated successfully!")
                     return True
-        
         print(f"⚠️ Puter.js returned: {response.status_code}")
         return False
-        
     except Exception as e:
         print(f"⚠️ Puter.js error: {e}")
         return False
@@ -340,16 +333,13 @@ def fetch_puter_image(prompt, filename):
 def fetch_ai_horde_image(prompt, filename):
     """Layer 4: AI Horde - FREE Community-Powered"""
     print(f"👥 [4/6] AI Horde (FREE - SDXL/Stable Cascade): {prompt[:40]}...")
-    
     url = "https://stablehorde.net/api/v2/generate/async"
-    
     headers = {
         "apikey": "0000000000",
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Client-Agent": "GhostBot:1.0.0"
     }
-    
     payload = {
         "prompt": f"{prompt}, photorealistic, dark cinematic, true crime, highly detailed, 8k",
         "params": {
@@ -364,142 +354,108 @@ def fetch_ai_horde_image(prompt, filename):
         "nsfw": False,
         "censor_nsfw": False
     }
-    
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=30)
-        
         if response.status_code != 202:
             print(f"⚠️ AI Horde request failed: {response.status_code}")
             return False
-        
         job_data = response.json()
         job_id = job_data.get('id')
-        
         if not job_id:
             print("⚠️ No job ID returned from AI Horde")
             return False
         
         print(f"⏳ AI Horde job submitted (ID: {job_id}). Waiting...")
-        
         for attempt in range(30):
             time.sleep(3)
-            
             check_url = f"https://stablehorde.net/api/v2/generate/check/{job_id}"
             check_response = requests.get(check_url, headers=headers, timeout=15)
-            
             if check_response.status_code == 200:
                 status = check_response.json()
-                
                 if status.get('done', False):
                     print("✅ AI Horde generation complete! Fetching image...")
-                    
                     result_url = f"https://stablehorde.net/api/v2/generate/status/{job_id}"
                     result_response = requests.get(result_url, headers=headers, timeout=15)
-                    
                     if result_response.status_code == 200:
                         result_data = result_response.json()
-                        
                         if 'generations' in result_data and len(result_data['generations']) > 0:
                             img_url = result_data['generations'][0]['img']
-                            
                             img_response = requests.get(img_url, timeout=20)
-                            
                             if img_response.status_code == 200:
                                 with open(filename, "wb") as f:
                                     f.write(img_response.content)
-                                
                                 if os.path.getsize(filename) > 1000:
                                     print(f"✅ AI Horde image downloaded successfully!")
                                     return True
-        
         print("⏱️ AI Horde generation timed out")
         return False
-        
     except Exception as e:
         print(f"⚠️ AI Horde error: {e}")
         return False
 
 def fetch_huggingface_image(prompt, filename):
-    """Layer 5: Hugging Face Inference API"""
-    print(f"🤗 [5/6] Hugging Face (FLUX/SDXL): {prompt[:40]}...")
+    """Layer 5: Hugging Face Inference API (Fixed to use FLUX Schnell without license block)"""
+    print(f"🤗 [5/6] Hugging Face (FLUX Schnell): {prompt[:40]}...")
     
-    models_to_try = [
-        "black-forest-labs/FLUX.1-dev",
-        "stabilityai/stable-diffusion-xl-base-1.0"
-    ]
+    if not HF_API_KEY:
+        print("⚠️ HF_API_KEY is missing! Hugging Face API requires authentication to prevent 401/410 blocks.")
+        return False
+
+    model_id = "black-forest-labs/FLUX.1-schnell"
+    url = f"https://api-inference.huggingface.co/models/{model_id}"
     
-    for model_id in models_to_try:
-        try:
-            url = f"https://api-inference.huggingface.co/models/{model_id}"
-            
-            headers = {
-                "Authorization": f"Bearer {HF_API_KEY}" if HF_API_KEY else "",
-                "Content-Type": "application/json"
-            }
-            
-            payload = {
-                "inputs": f"{prompt}, photorealistic, dark cinematic lighting, true crime documentary style, highly detailed, 8k, vertical",
-                "parameters": {
-                    "width": VIDEO_WIDTH,
-                    "height": VIDEO_HEIGHT,
-                    "num_inference_steps": 25
-                }
-            }
-            
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
-            
-            if response.status_code == 200:
-                with open(filename, "wb") as f:
-                    f.write(response.content)
-                
-                if os.path.getsize(filename) > 1000:
-                    print(f"✅ Hugging Face image generated with {model_id}!")
-                    return True
-            elif response.status_code == 503:
-                print(f"⚠️ Model {model_id} is loading, trying next model...")
-                continue
-            else:
-                print(f"⚠️ HF API {model_id} returned: {response.status_code}")
-                
-        except Exception as e:
-            print(f"⚠️ Hugging Face error with {model_id}: {e}")
-            continue
+    headers = {
+        "Authorization": f"Bearer {HF_API_KEY}",
+        "Content-Type": "application/json"
+    }
     
+    payload = {
+        "inputs": f"{prompt}, photorealistic, dark cinematic lighting, true crime documentary style",
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        
+        if response.status_code == 200:
+            with open(filename, "wb") as f:
+                f.write(response.content)
+            
+            if os.path.getsize(filename) > 1000:
+                print("✅ Hugging Face image generated successfully!")
+                return True
+        else:
+            print(f"⚠️ HF API returned: {response.status_code} - {response.text}")
+            
+    except Exception as e:
+        print(f"⚠️ Hugging Face error: {e}")
+        
     return False
 
 def fetch_placeholder_image(keyword, filename):
     """Layer 6: Emergency Placeholder (Guaranteed to work)"""
     print(f"🚨 [6/6] EMERGENCY: Creating placeholder image...")
-    
     try:
         from PIL import Image, ImageDraw, ImageFont
-        
         img = Image.new('RGB', (VIDEO_WIDTH, VIDEO_HEIGHT), color=(10, 10, 20))
         draw = ImageDraw.Draw(img)
-        
         for y in range(VIDEO_HEIGHT):
             r = int(10 + (y / VIDEO_HEIGHT) * 20)
             g = int(10 + (y / VIDEO_HEIGHT) * 20)
             b = int(20 + (y / VIDEO_HEIGHT) * 40)
             draw.line([(0, y), (VIDEO_WIDTH, y)], fill=(r, g, b))
-        
         words = keyword.replace("AI_GEN:", "").replace("real historical photo", "").strip()[:60]
-        
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/msttcorefonts/Impact.ttf", 48)
             small_font = ImageFont.truetype("/usr/share/fonts/truetype/msttcorefonts/Arial.ttf", 32)
         except:
             font = ImageFont.load_default()
             small_font = font
-        
         draw.text((VIDEO_WIDTH//2, VIDEO_HEIGHT//2 - 50), "MYSTERY", fill=(255, 215, 0), font=font, anchor="mm")
         draw.text((VIDEO_WIDTH//2, VIDEO_HEIGHT//2 + 50), words, fill=(200, 200, 200), font=small_font, anchor="mm")
         draw.text((VIDEO_WIDTH//2, VIDEO_HEIGHT//2 + 150), "⚫ ◼️ ", fill=(100, 100, 100), font=font, anchor="mm")
-        
         img.save(filename, "JPEG", quality=95)
         print("✅ Placeholder image created!")
         return True
-        
     except Exception as e:
         print(f"❌ Placeholder creation failed: {e}")
         return False
@@ -509,7 +465,6 @@ def verify_and_convert_image(filename):
     try:
         with PIL.Image.open(filename) as img:
             img.verify()
-        
         with PIL.Image.open(filename) as img:
             if img.mode in ('RGBA', 'P', 'LA', 'L'):
                 img = img.convert('RGB')
@@ -538,30 +493,23 @@ def get_image_clip(keyword, duration, index):
                     "num": 1,
                     "safe": "active"
                 }
-                
                 try:
-                    r = requests.get(url, params=params, timeout=15,
-                                   headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                    r = requests.get(url, params=params, timeout=15, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
                     r.raise_for_status()
                     data = r.json()
-                    
                     if "items" in data and len(data["items"]) > 0:
                         img_url = data["items"][0]["link"]
                         print(f"📥 Downloading from Google: {img_url[:60]}...")
-                        
                         headers = {
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                             'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
                         }
                         img_data = requests.get(img_url, headers=headers, timeout=20).content
-                        
                         with open(img_filename, "wb") as f:
                             f.write(img_data)
-                        
                         if os.path.exists(img_filename) and os.path.getsize(img_filename) > 1000:
                             success = True
                             print(f"✅ Google image downloaded ({os.path.getsize(img_filename)} bytes)")
-                    
                 except requests.exceptions.Timeout:
                     print("⏱️ Google API timed out")
                 except Exception as e:
@@ -590,18 +538,15 @@ def get_image_clip(keyword, duration, index):
         
         # === LAYER 6: Emergency Placeholder ===
         if not success:
-            print(f"🚨 [6/6] EMERGENCY: Creating placeholder image...")
             success = fetch_placeholder_image(keyword, img_filename)
         
         # === VALIDATE & CONVERT ===
         if success and os.path.exists(img_filename):
             file_size = os.path.getsize(img_filename)
             print(f"📊 Image file size: {file_size} bytes")
-            
             if file_size < 500:
                 print("⚠️ Image file too small, attempting conversion...")
                 success = False
-            
             try:
                 verify_and_convert_image(img_filename)
             except Exception as e:
@@ -610,11 +555,9 @@ def get_image_clip(keyword, duration, index):
         # === CREATE VIDEO CLIP ===
         try:
             clip = ImageClip(img_filename).set_duration(duration)
-            
             clip = clip.resize(height=VIDEO_HEIGHT)
             if clip.w < VIDEO_WIDTH:
                 clip = clip.resize(width=VIDEO_WIDTH)
-            
             clip = clip.crop(x_center=clip.w/2, y_center=clip.h/2, width=VIDEO_WIDTH, height=VIDEO_HEIGHT)
             
             if index % 2 == 0:
@@ -624,10 +567,8 @@ def get_image_clip(keyword, duration, index):
                 
             clip = clip.resize(zoom_func)
             clip = clip.crop(x_center=clip.w/2, y_center=clip.h/2, width=VIDEO_WIDTH, height=VIDEO_HEIGHT)
-            
             print(f"✅ Clip {index} created successfully!")
             return clip
-            
         except Exception as e:
             print(f"⚠️ MoviePy clip error: {e}")
             return ColorClip(size=(VIDEO_WIDTH, VIDEO_HEIGHT), color=(20, 20, 35), duration=duration)
@@ -648,7 +589,6 @@ def add_dynamic_subtitles(video_clip, audio_path):
             clean_word = word.word.strip().upper()
             if not clean_word:
                 continue
-
             try:
                 txt_clip = TextClip(
                     clean_word,
@@ -663,7 +603,8 @@ def add_dynamic_subtitles(video_clip, audio_path):
                 
                 subtitle_clips.append(txt_clip)
             except Exception as e:
-                pass
+                # FIXED: No longer failing silently. This will tell us if ImageMagick is still broken.
+                print(f"⚠️ Subtitle text rendering error for word '{clean_word}': {e}")
 
     print(f"✅ Generated {len(subtitle_clips)} word captions!")
     return CompositeVideoClip([video_clip] + subtitle_clips)
@@ -696,7 +637,6 @@ def main_pipeline():
             acting_input = line.get("acting_text", line.get("text"))
             style_instruction = line.get("style_instruction", "Serious and highly suspenseful.")
             clean_text = line.get("clean_text", line.get("text", ""))
-            
             visuals_list = line.get("visuals", ["AI_GEN: dark cinematic eerie background"])
 
             wav_file = voice_engine.generate_acting_line(
@@ -718,12 +658,10 @@ def main_pipeline():
             
             for vis_keyword in visuals_list:
                 img_clip = get_image_clip(vis_keyword, duration_per_image, global_img_index)
-                
                 if len(line_visual_clips) > 0:
                     img_clip = img_clip.set_start(line_visual_clips[-1].end)
                 else:
                     img_clip = img_clip.set_start(0)
-                    
                 line_visual_clips.append(img_clip)
                 global_img_index += 1
 
@@ -732,7 +670,6 @@ def main_pipeline():
 
             if len(final_clips) > 0:
                 line_video = line_video.set_start(final_clips[-1].end)
-            
             final_clips.append(line_video)
 
         except Exception as e:
