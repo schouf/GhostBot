@@ -59,7 +59,10 @@ jobs:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
           GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
-          HF_API_KEY: ${{ secrets.HF_API_KEY }}
+          # THE TITANIUM PIPELINE SECRETS
+          SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: python main.py
 
       - name: Debug Visuals (Verify Image Downloads)
