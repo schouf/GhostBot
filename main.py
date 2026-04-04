@@ -283,6 +283,7 @@ Provide EXACTLY {required_images} items in a JSON array. Return ONLY valid JSON 
 
 # ================== 4-LAYER TITANIUM PIPELINE ==================
 def fetch_cloudflare_image(prompt, filename):
+    """Layer 2: Cloudflare Workers AI (Unkillable Edge API) - Base64 JSON Decoded"""
     print(f"☁️ [2/4] Cloudflare (FLUX.1): {prompt[:40]}...")
     if not CF_ACCOUNT_ID or not CF_API_TOKEN:
         print("⚠️ Cloudflare credentials missing. Skipping Cloudflare layer.")
@@ -295,10 +296,29 @@ def fetch_cloudflare_image(prompt, filename):
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=45)
         if response.status_code == 200:
-            with open(filename, "wb") as f: f.write(response.content)
-            if os.path.getsize(filename) > 1000: 
-                print("✅ Cloudflare image successfully generated.")
-                return True
+            content_type = response.headers.get("Content-Type", "")
+            
+            # If Cloudflare sends the image wrapped inside JSON text
+            if "application/json" in content_type:
+                data = response.json()
+                image_b64 = data.get("result", {}).get("image")
+                
+                if image_b64:
+                    with open(filename, "wb") as f:
+                        f.write(base64.b64decode(image_b64))
+                    print("✅ Cloudflare JSON decoded and image saved!")
+                    return True
+                else:
+                    print(f"⚠️ Cloudflare JSON format unknown.")
+                    return False
+            
+            # If Cloudflare sends the raw binary image directly
+            else:
+                with open(filename, "wb") as f:
+                    f.write(response.content)
+                if os.path.getsize(filename) > 1000:
+                    print("✅ Cloudflare binary image generated successfully!")
+                    return True
         else:
             print(f"⚠️ Cloudflare API error: {response.status_code} - {response.text}")
     except Exception as e:
