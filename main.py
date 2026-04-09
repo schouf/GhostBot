@@ -142,6 +142,30 @@ def get_best_free_openrouter_model():
         print(f"⚠️ Dynamic model scout failed: {e}. Using default model.")
         return default_model
 
+# ================== LLM HELPER ==================
+def ask_llm(system_instruction, prompt, sota_model):
+    """A clean, robust helper function for single-task text generation with strict output constraints."""
+    strict_prompt = prompt + "\n\nCRITICAL RULE: Return ONLY the exact requested text. Do not include introductory conversational text like 'Here is the title:' or 'Sure!'"
+    
+    if OPENROUTER_KEY:
+        headers = {"Authorization": f"Bearer {OPENROUTER_KEY}", "Content-Type": "application/json"}
+        payload = {"model": sota_model, "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": strict_prompt}]}
+        try:
+            r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=45)
+            if r.status_code == 200:
+                return r.json()['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            print(f"⚠️ SOTA LLM error: {e}")
+
+    try:
+        client = genai.Client(api_key=GEMINI_KEY)
+        config = types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.7)
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=strict_prompt, config=config)
+        return response.text.strip()
+    except Exception as e:
+        print(f"⚠️ Gemini fallback error: {e}")
+        return ""
+
 # ================== PHASE 1: THE WRITER ==================
 def generate_viral_script(fallback_sota_model):
     """Phase 1: Writer module purely focused on high-retention script structure and TTS emotional tags."""
@@ -161,11 +185,7 @@ def generate_viral_script(fallback_sota_model):
 
     json_template = '''
 {
-    "title": "They found WHAT? #shorts #mystery",
     "case_name": "The Somerton Man",
-    "description": "Unsolved mysteries, true crime documentary...",
-    "pinned_comment": "What would be your first move? 👇",
-    "tags": ["mystery", "shorts", "unsolved", "scary", "glitch", "creepy"],
     "recommended_voice_model": "Charon",
     "lines": [
         {
@@ -316,7 +336,6 @@ Provide EXACTLY {required_images} items. Return ONLY valid JSON matching this fo
 
 # ================== 4-LAYER TITANIUM PIPELINE ==================
 def fetch_ddg_image(prompt, filename):
-    """Layer 1: DuckDuckGo Keyless Image Search"""
     print(f"🔍 [1/4] DuckDuckGo Search: {prompt[:40]}...")
     try:
         from duckduckgo_search import DDGS
@@ -342,7 +361,6 @@ def fetch_ddg_image(prompt, filename):
     return False
 
 def fetch_cloudflare_image(prompt, filename):
-    """Layer 2: Cloudflare Workers AI (Unkillable Edge API) - Base64 JSON Decoded"""
     print(f"☁️ [2/4] Cloudflare (FLUX.1): {prompt[:40]}...")
     if not CF_ACCOUNT_ID or not CF_API_TOKEN:
         print("⚠️ Cloudflare credentials missing. Skipping Cloudflare layer.")
@@ -495,18 +513,18 @@ def add_dynamic_subtitles(video_clip, audio_path):
         print(f"❌ Whisper Transcription failed entirely: {e}")
         return video_clip
 
-def upload_to_youtube(file_path, metadata):
+def upload_to_youtube(file_path, yt_metadata):
     if not file_path: return False
     print("🚀 Uploading to YouTube...")
     try:
         creds = Credentials.from_authorized_user_info(json.loads(YOUTUBE_TOKEN_VAL))
         youtube = build("youtube", "v3", credentials=creds)
-        full_description = f"{metadata['description']}\n\n{metadata.get('pinned_comment', '')}"
+        full_description = f"{yt_metadata['description']}\n\nWhat would be your first move? 👇"
         
         youtube.videos().insert(
             part="snippet,status",
             body={
-                "snippet": {"title": metadata["title"], "description": full_description, "tags": metadata["tags"], "categoryId": "24"}, 
+                "snippet": {"title": yt_metadata["title"], "description": full_description, "tags": yt_metadata["tags"], "categoryId": "24"}, 
                 "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
             },
             media_body=MediaFileUpload(file_path, chunksize=-1, resumable=True)
@@ -517,33 +535,47 @@ def upload_to_youtube(file_path, metadata):
         print(f"❌ YouTube Upload failed: {e}")
         return False
 
-def generate_meta_caption(metadata, fallback_sota_model):
-    print("🤖 Generating optimized Meta caption...")
-    client = genai.Client(api_key=GEMINI_KEY)
-    prompt = f"Write an engaging caption for this mystery video:\nTitle: {metadata['title']}\nDescription: {metadata['description']}\nInclude a call to action and hashtags."
+# ================== PHASE 5: THE MARKETER (STRICT CHAIN) ==================
+def generate_youtube_metadata(full_script_text, sota_model):
+    """Executes a strict 1-to-1 prompt isolation workflow exclusively for YouTube SEO."""
+    print("📈 Phase 5: Marketer - Generating YouTube SEO Chain...")
+    sys_prompt = "You are an elite YouTube Shorts SEO Strategist. You ONLY output the exact data requested, with absolutely no conversational filler, no greetings, and no markdown blocks."
     
-    try:
-        config = types.GenerateContentConfig(temperature=0.7)
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt, config=config)
-        print("✅ Meta Caption generated successfully with Gemini.")
-        return response.text.strip()
-    except Exception as e: 
-        print(f"⚠️ Gemini Meta caption generation failed: {e}")
+    # Task 1: Generate Title ONLY
+    print("   -> Drafting optimized Title...")
+    t_prompt = f"Read this short script and write ONE highly viral, click-oriented YouTube Shorts title (under 60 characters). Do not include quotes, hashtags, or introductory text.\nScript: {full_script_text}"
+    title = ask_llm(sys_prompt, t_prompt, sota_model).strip('"').replace("'", "")
+    if not title or len(title) > 80: title = "They found WHAT?"
+    
+    # Task 2: Generate Description ONLY (Based on Title)
+    print("   -> Drafting optimized Description...")
+    d_prompt = f"You have a YouTube Short titled: '{title}'. The script is: '{full_script_text}'. Write a compelling 3-sentence description optimized for the YouTube algorithm. Do not use hashtags or introductory text."
+    description = ask_llm(sys_prompt, d_prompt, sota_model)
+    if not description: description = "An unsolved mystery that will leave you speechless."
+    
+    # Task 3: Generate Tags ONLY (Based on Title + Description)
+    print("   -> Extracting optimized Tags...")
+    tag_prompt = f"You have a YouTube Short titled: '{title}' and described as: '{description}'. Provide exactly 8 highly-searched SEO tags. Return ONLY a comma-separated list of words. Do not use hashtags (#) or introductory text."
+    tags_str = ask_llm(sys_prompt, tag_prompt, sota_model)
+    tags = [t.strip().replace("#", "") for t in tags_str.split(',')] if tags_str else ["mystery", "shorts", "creepy", "unsolved", "truecrime"]
+
+    title_with_hashtags = f"{title} #shorts #mystery"
+    print("✅ YouTube SEO Chain Complete.")
+    return {"title": title_with_hashtags, "description": description, "tags": tags}
+
+def generate_platform_captions(yt_metadata, platform, sota_model):
+    """Generates strictly isolated platform-specific captions."""
+    print(f"🤖 Generating optimized {platform} caption...")
+    sys_prompt = f"You are an elite {platform} Social Media Manager. You output ONLY the final caption text with absolutely no introductory words or conversational filler."
+    
+    if platform == "Instagram":
+        prompt = f"Convert this YouTube metadata into a viral Instagram Reels caption.\nTitle: {yt_metadata['title']}\nDescription: {yt_metadata['description']}\nREQUIREMENTS: Include a strong visual hook, a call-to-action to comment, and exactly 6 targeted hashtags. Format nicely with emojis. NO introductory text."
+    else: # Facebook
+        prompt = f"Convert this YouTube metadata into a highly engaging Facebook Reels caption.\nTitle: {yt_metadata['title']}\nDescription: {yt_metadata['description']}\nREQUIREMENTS: Facebook audiences love storytelling. Make it conversational, ask a highly specific question to drive comments, and use 3 broad hashtags. NO introductory text."
         
-        if OPENROUTER_KEY:
-            print(f"🔄 Activating Global SOTA Brain ({fallback_sota_model}) for Caption Generation...")
-            try:
-                headers = {"Authorization": f"Bearer {OPENROUTER_KEY}", "Content-Type": "application/json"}
-                payload = {"model": fallback_sota_model, "messages": [{"role": "user", "content": prompt}]}
-                r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=60)
-                if r.status_code == 200:
-                    caption = r.json()['choices'][0]['message']['content'].strip('"').strip()
-                    print(f"✅ Meta Caption generated successfully with SOTA Fallback.")
-                    return caption
-            except Exception as sota_e:
-                print(f"❌ SOTA Fallback error: {sota_e}")
-                
-        return f"{metadata['title']}\n\nWhat do you think happened? Let us know! 👇\n\n#Mystery #Shorts"
+    caption = ask_llm(sys_prompt, prompt, sota_model)
+    if not caption: caption = f"{yt_metadata['title']}\n\nWhat do you think happened? 👇\n\n#Mystery"
+    return caption
 
 # ================== MASTER ORCHESTRATION ==================
 def main_pipeline():
@@ -553,7 +585,7 @@ def main_pipeline():
         voice_engine = VoiceEngine()
     except Exception as e:
         print(f"❌ VoiceEngine Initialization Error: {e}")
-        return None, None, None
+        return None, None, None, None
 
     # PHASE 0: AWAKEN GLOBAL SOTA BRAIN
     global_sota_model = get_best_free_openrouter_model()
@@ -562,9 +594,9 @@ def main_pipeline():
     script = generate_viral_script(global_sota_model)
     if not script: 
         print("❌ Script generation returned None. Aborting.")
-        return None, None, None
+        return None, None, None, None
         
-    print(f"🎬 Title: {script['title']}")
+    print(f"🎬 Case: {script.get('case_name', 'Unknown')}")
 
     # PHASE 2: RECORDING STUDIO (Audio First)
     print("🎙️ Phase 2: Recording Studio (Generating Voiceover...)")
@@ -593,7 +625,7 @@ def main_pipeline():
 
     if not audio_clips: 
         print("❌ No audio clips successfully generated. Aborting.")
-        return None, None, None
+        return None, None, None, None
     
     master_voice_clip = concatenate_audioclips(audio_clips)
     total_duration = master_voice_clip.duration
@@ -603,7 +635,7 @@ def main_pipeline():
     
     print(f"⏱️ Master Audio Duration: {total_duration:.2f}s | Images Needed: {required_images}")
 
-    # PHASE 3 & 4: CINEMATOGRAPHER & FETCHING (Powered by Global SOTA)
+    # PHASE 3 & 4: CINEMATOGRAPHER & FETCHING 
     visual_directions = generate_cinematographer_prompts(full_script_text, required_images, global_sota_model)
     duration_per_image = total_duration / len(visual_directions)
     
@@ -619,7 +651,7 @@ def main_pipeline():
         final_video = final_video.set_audio(master_voice_clip).fx(colorx, 0.85)
     except Exception as e:
         print(f"❌ Final composition stitch failed: {e}")
-        return None, None, None
+        return None, None, None, None
 
     temp_voice_track = "temp_master_voice.wav"
     master_voice_clip.write_audiofile(temp_voice_track, fps=24000, logger=None)
@@ -641,30 +673,36 @@ def main_pipeline():
         )
     except Exception as e:
         print(f"❌ Critical failure during video encoding: {e}")
-        return None, None, None
+        return None, None, None, None
     
     try:
         for f in glob.glob("temp_*.wav") + glob.glob("temp_*.jpg"): os.remove(f)
     except Exception as e:
         print(f"⚠️ Minor error during temporary file cleanup: {e}")
         
-    return output_file, script, global_sota_model
+    return output_file, script, full_script_text, global_sota_model
 
 # ================== ENTRY ==================
 if __name__ == "__main__":
-    video_path, metadata, global_sota = main_pipeline()
-    if video_path and metadata and global_sota:
-        if upload_to_youtube(video_path, metadata):
-            case_name = metadata.get('case_name', metadata.get('title', 'Unknown Case'))
+    video_path, script_data, full_script_text, global_sota = main_pipeline()
+    
+    if video_path and script_data and global_sota:
+        
+        # PHASE 5: THE MARKETER (Execute SEO Chain)
+        yt_metadata = generate_youtube_metadata(full_script_text, global_sota)
+        
+        if upload_to_youtube(video_path, yt_metadata):
+            case_name = script_data.get('case_name', 'Unknown Case')
             save_new_topic(case_name)
             
-            # The Marketer is also powered by the Global SOTA
-            meta_caption = generate_meta_caption(metadata, global_sota)
-            meta_upload.upload_to_facebook(video_path, meta_caption)
+            # Platform Specific Marketing
+            fb_caption = generate_platform_captions(yt_metadata, "Facebook", global_sota)
+            meta_upload.upload_to_facebook(video_path, fb_caption)
             
+            ig_caption = generate_platform_captions(yt_metadata, "Instagram", global_sota)
             temp_url = meta_upload.get_temp_public_url(video_path)
             if temp_url: 
-                meta_upload.upload_to_instagram(temp_url, meta_caption)
+                meta_upload.upload_to_instagram(temp_url, ig_caption)
             else:
                 print("⏭️ Skipping Instagram due to temporary host failure.")
                 
