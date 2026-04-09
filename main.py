@@ -82,18 +82,18 @@ def save_new_topic(case_name):
 
 # ================== GLOBAL SOTA INTELLIGENCE ==================
 def get_best_free_openrouter_model():
-    """Enterprise-grade SOTA selector using an ELO-weighted Reward Matrix."""
-    print("🔍 Scouting OpenRouter for the highest-quality free SOTA model...")
+    """Task-Optimized SOTA selector prioritizing strict JSON formatting and creative writing."""
+    print("🔍 Scouting OpenRouter for the best creative & structured SOTA model...")
     default_model = "meta-llama/llama-3.3-70b-instruct:free"
     
+    # VIP Matrix explicitly ranked by their ability to write viral scripts and output strict JSON.
     SOTA_REWARD_MATRIX = {
-        "deepseek/deepseek-r1:free": 99,             
-        "qwen/qwen-3.6-plus:free": 98,               
-        "arcee-ai/trinity-large-preview:free": 96,   
-        "meta-llama/llama-3.3-70b-instruct:free": 94,
-        "nvidia/nemotron-3-super:free": 92,
-        "google/gemma-4-31b-instruct:free": 90,      
-        "stepfun/step-3.5-flash:free": 85
+        "meta-llama/llama-3.3-70b-instruct:free": 99,  # Elite at storytelling & strict JSON
+        "qwen/qwen-3.6-plus:free": 98,                 # Elite alternative
+        "mistralai/mistral-large:free": 97,            # Very creative
+        "deepseek/deepseek-r1:free": 95,               # Great, but can sometimes overthink JSON
+        "nvidia/nemotron-3-super:free": 94,
+        "google/gemma-4-31b-instruct:free": 90
     }
     
     if not OPENROUTER_KEY:
@@ -120,17 +120,32 @@ def get_best_free_openrouter_model():
 
         def get_model_reward(m_id):
             m_lower = m_id.lower()
-            for known_model, score in SOTA_REWARD_MATRIX.items():
-                if known_model in m_lower: return score
             
+            # 1. VIP Fast-Pass
+            for known_model, score in SOTA_REWARD_MATRIX.items():
+                if known_model in m_lower: 
+                    return score
+            
+            # 2. Dynamic Requirement Scoring (Task-Specific)
             score = 50
-            if "qwen-3" in m_lower or "deepseek" in m_lower: score += 20
+            
+            # Reward models explicitly tuned for instruction following (crucial for JSON)
+            if "instruct" in m_lower: score += 20
+            if "chat" in m_lower: score += 10
+            
+            # Reward proven high-quality creative families
             if "llama-3" in m_lower: score += 15
-            if "instruct" in m_lower or "chat" in m_lower: score += 10
+            elif "qwen" in m_lower: score += 15
+            elif "mistral" in m_lower: score += 10
+            
+            # PENALIZE unproven, experimental, or preview models (Prevents Arcee Trinity from winning)
+            if "preview" in m_lower or "experimental" in m_lower or "liquid" in m_lower or "test" in m_lower: 
+                score -= 40
+                
             return score
 
         best_model = max(free_models, key=get_model_reward)
-        print(f"🌟 Global SOTA Brain Locked: {best_model} (Reward Score: {get_model_reward(best_model)})")
+        print(f"🌟 Task-Optimized SOTA Locked: {best_model} (Reward Score: {get_model_reward(best_model)})")
         return best_model
         
     except Exception as e:
