@@ -142,7 +142,7 @@ def get_top_free_openrouter_models(limit=3):
 
 # ================== LLM HELPER ==================
 def ask_llm(system_instruction, prompt, sota_models):
-    """A robust helper function that loops through SOTA models until one succeeds."""
+    """A robust helper function that loops through SOTA models with anti-spam delays until one succeeds."""
     strict_prompt = prompt + "\n\nCRITICAL RULE: Return ONLY the exact requested text. Do not include introductory conversational text like 'Here is the title:' or 'Sure!'"
     
     if OPENROUTER_KEY:
@@ -155,15 +155,17 @@ def ask_llm(system_instruction, prompt, sota_models):
                     return r.json()['choices'][0]['message']['content'].strip()
                 else:
                     print(f"⚠️ OpenRouter ({sota_model}) returned {r.status_code}. Cascading to next model...")
+                    time.sleep(4) # Anti-Spam buffer
             except Exception as e:
                 print(f"⚠️ SOTA LLM error ({sota_model}): {e}")
+                time.sleep(4)
 
     # Final Fallback to Gemini Flash
     try:
         print("⚠️ All OpenRouter models busy. Falling back to Gemini Flash...")
         client = genai.Client(api_key=GEMINI_KEY)
         config = types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.7)
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=strict_prompt, config=config)
+        response = client.models.generate_content(model="models/gemini-2.5-flash", contents=strict_prompt, config=config)
         return response.text.strip()
     except Exception as e:
         print(f"⚠️ Gemini final fallback error: {e}")
@@ -171,7 +173,7 @@ def ask_llm(system_instruction, prompt, sota_models):
 
 # ================== PHASE 1: THE WRITER ==================
 def generate_viral_script(fallback_sota_models):
-    """Phase 1: Writer module. Tries Gemini Pro first, then cascades through Top 3 OpenRouter models."""
+    """Phase 1: Writer module. Tries Gemini Pro, cascades to OpenRouter, falls back to Gemini Flash."""
     print("🧠 Phase 1: Generating Master Script (Writer)...")
     client = genai.Client(api_key=GEMINI_KEY)
     
@@ -232,10 +234,10 @@ Return ONLY valid JSON exactly matching this format:
     try:
         response = client.models.generate_content(model="models/gemini-2.5-pro", contents=prompt, config=config)
         data = json.loads(response.text)
-        print("✅ Script written successfully with Gemini.")
+        print("✅ Script written successfully with Gemini Pro.")
         return data
     except Exception as e:
-        print(f"⚠️ Gemini Script Error: {e}")
+        print(f"⚠️ Gemini Pro Quota/Error: {e}")
         
         if OPENROUTER_KEY:
             headers = {"Authorization": f"Bearer {OPENROUTER_KEY}", "Content-Type": "application/json"}
@@ -250,14 +252,27 @@ Return ONLY valid JSON exactly matching this format:
                         return json.loads(content)
                     else:
                         print(f"❌ SOTA Fallback {fallback_model} busy/failed ({r.status_code}). Cascading to next...")
+                        time.sleep(4) # Anti-Spam buffer
                 except Exception as sota_e:
                     print(f"❌ SOTA Fallback error for {fallback_model}: {sota_e}")
+                    time.sleep(4)
+
+    # ULTIMATE SAFETY NET: Gemini Flash (1500 daily requests)
+    print("🚨 All primary APIs blocked. Engaging Ultimate Fallback (Gemini 2.5 Flash)...")
+    try:
+        flash_config = types.GenerateContentConfig(temperature=0.9, top_p=0.95, response_mime_type="application/json")
+        response = client.models.generate_content(model="models/gemini-2.5-flash", contents=prompt, config=flash_config)
+        data = json.loads(response.text)
+        print("✅ Script written successfully with Gemini Flash.")
+        return data
+    except Exception as flash_e:
+        print(f"❌ Ultimate Fallback also failed: {flash_e}")
 
     return None
 
 # ================== PHASE 3: THE CINEMATOGRAPHER ==================
 def generate_cinematographer_prompts(full_script_text, required_images, sota_models):
-    """Phase 3: Visual Directives module that cascades through available top models."""
+    """Phase 3: Visual Directives module that cascades through models and falls back to Flash."""
     json_template = '''
 {
   "visuals": [
@@ -318,8 +333,29 @@ Provide EXACTLY {required_images} items. Return ONLY valid JSON matching this fo
                 return visuals[:required_images]
             else:
                 print(f"❌ Cinematographer API ({sota_model}) returned {response.status_code}. Cascading...")
+                time.sleep(4)
         except Exception as e:
             print(f"❌ Cinematographer execution error ({sota_model}): {e}")
+            time.sleep(4)
+
+    # ULTIMATE SAFETY NET: Gemini Flash
+    print("🚨 All OpenRouter models blocked. Engaging Ultimate Fallback (Gemini Flash) for Visuals...")
+    try:
+        client = genai.Client(api_key=GEMINI_KEY)
+        flash_config = types.GenerateContentConfig(temperature=0.7, response_mime_type="application/json")
+        response = client.models.generate_content(model="models/gemini-2.5-flash", contents=prompt, config=flash_config)
+        content = response.text.replace("```json", "").replace("```", "").strip()
+        data = json.loads(content)
+        visuals = data.get("visuals", [])
+        while len(visuals) < required_images:
+            visuals.append({
+                "search_query": "historical true crime evidence photo archive", 
+                "ai_prompt": "Dark cinematic mystery background, true crime documentary style, volumetric lighting, 35mm photography, 8k resolution, highly detailed, vertical composition"
+            })
+        print("✅ Cinematographer visuals generated with Gemini Flash.")
+        return visuals[:required_images]
+    except Exception as flash_e:
+        print(f"❌ Ultimate Fallback failed: {flash_e}")
             
     print("🚨 Generating emergency visual prompts to prevent pipeline crash.")
     return [{
