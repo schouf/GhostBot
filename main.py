@@ -23,8 +23,6 @@ import meta_upload
 # ================== CONFIG ==================
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY")
-SEARCH_API_KEY = os.environ.get("SEARCH_API_KEY")
-GOOGLE_CSE_ID = os.environ.get("GOOGLE_CSE_ID")
 YOUTUBE_TOKEN_VAL = os.environ.get("YOUTUBE_TOKEN_JSON")
 
 # TITANIUM PIPELINE KEYS
@@ -86,12 +84,11 @@ def get_best_free_openrouter_model():
     print("🔍 Scouting OpenRouter for the best creative & structured SOTA model...")
     default_model = "meta-llama/llama-3.3-70b-instruct:free"
     
-    # VIP Matrix explicitly ranked by their ability to write viral scripts and output strict JSON.
     SOTA_REWARD_MATRIX = {
-        "meta-llama/llama-3.3-70b-instruct:free": 99,  # Elite at storytelling & strict JSON
-        "qwen/qwen-3.6-plus:free": 98,                 # Elite alternative
-        "mistralai/mistral-large:free": 97,            # Very creative
-        "deepseek/deepseek-r1:free": 95,               # Great, but can sometimes overthink JSON
+        "meta-llama/llama-3.3-70b-instruct:free": 99, 
+        "qwen/qwen-3.6-plus:free": 98,                 
+        "mistralai/mistral-large:free": 97,            
+        "deepseek/deepseek-r1:free": 95,               
         "nvidia/nemotron-3-super:free": 94,
         "google/gemma-4-31b-instruct:free": 90
     }
@@ -121,24 +118,17 @@ def get_best_free_openrouter_model():
         def get_model_reward(m_id):
             m_lower = m_id.lower()
             
-            # 1. VIP Fast-Pass
             for known_model, score in SOTA_REWARD_MATRIX.items():
                 if known_model in m_lower: 
                     return score
             
-            # 2. Dynamic Requirement Scoring (Task-Specific)
             score = 50
-            
-            # Reward models explicitly tuned for instruction following (crucial for JSON)
             if "instruct" in m_lower: score += 20
             if "chat" in m_lower: score += 10
-            
-            # Reward proven high-quality creative families
             if "llama-3" in m_lower: score += 15
             elif "qwen" in m_lower: score += 15
             elif "mistral" in m_lower: score += 10
             
-            # PENALIZE unproven, experimental, or preview models (Prevents Arcee Trinity from winning)
             if "preview" in m_lower or "experimental" in m_lower or "liquid" in m_lower or "test" in m_lower: 
                 score -= 40
                 
@@ -260,7 +250,7 @@ Here is the voiceover script for our new video:
 
 The final audio track is already recorded. To perfectly pace the video, we need EXACTLY {required_images} visual transitions. 
 For each of the {required_images} scenes, you must provide two things:
-1. 'search_query': A very specific, real-world Google Image search term.
+1. 'search_query': A very specific, real-world DuckDuckGo Image search term (e.g. "Max Headroom broadcast 1987 original photo").
 2. 'ai_prompt': A highly detailed, photorealistic Midjourney-style prompt as a fallback if the real photo isn't found.
 
 Provide EXACTLY {required_images} items in a JSON array. Return ONLY valid JSON matching this format:
@@ -297,6 +287,33 @@ Provide EXACTLY {required_images} items in a JSON array. Return ONLY valid JSON 
     return [{"search_query": "mystery evidence photo", "ai_prompt": "dark cinematic eerie background 8k"} for _ in range(required_images)]
 
 # ================== 4-LAYER TITANIUM PIPELINE ==================
+def fetch_ddg_image(prompt, filename):
+    """Layer 1: DuckDuckGo Keyless Image Search"""
+    print(f"🔍 [1/4] DuckDuckGo Search: {prompt[:40]}...")
+    try:
+        from duckduckgo_search import DDGS
+        with DDGS() as ddgs:
+            # Fetch top 3 results in case the first link is dead
+            results = list(ddgs.images(prompt, max_results=3))
+            for res in results:
+                img_url = res.get("image")
+                if img_url:
+                    try:
+                        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                        img_data = requests.get(img_url, headers=headers, timeout=10).content
+                        with open(filename, "wb") as f:
+                            f.write(img_data)
+                        if os.path.getsize(filename) > 1000:
+                            print("✅ DuckDuckGo real historical image successfully downloaded!")
+                            return True
+                    except:
+                        continue # If this image link is dead, seamlessly try the next one
+    except ImportError:
+        print("⚠️ duckduckgo-search package not installed. Add it to requirements.txt!")
+    except Exception as e:
+        print(f"⚠️ DuckDuckGo search failed: {e}")
+    return False
+
 def fetch_cloudflare_image(prompt, filename):
     """Layer 2: Cloudflare Workers AI (Unkillable Edge API) - Base64 JSON Decoded"""
     print(f"☁️ [2/4] Cloudflare (FLUX.1): {prompt[:40]}...")
@@ -394,27 +411,16 @@ def get_image_clip(search_query, ai_prompt, duration, index):
     img_filename = f"temp_img_{index}.jpg"
     success = False
     
-    if SEARCH_API_KEY and GOOGLE_CSE_ID:
-        print(f"🔍 [1/4] Google Search: {search_query[:40]}")
-        url = "https://www.googleapis.com/customsearch/v1"
-        params = {"q": search_query, "cx": GOOGLE_CSE_ID, "key": SEARCH_API_KEY, "searchType": "image", "num": 1}
-        try:
-            response = requests.get(url, params=params, timeout=15)
-            response.raise_for_status()
-            data = response.json()
-            if "items" in data:
-                img_data = requests.get(data["items"][0]["link"], timeout=20).content
-                with open(img_filename, "wb") as f: f.write(img_data)
-                if os.path.getsize(img_filename) > 1000: 
-                    print("✅ Google Search image successfully downloaded.")
-                    success = True
-        except requests.exceptions.Timeout:
-            print("⚠️ Google Search API timed out.")
-        except Exception as e:
-            print(f"⚠️ Google Search API error: {e}")
+    # Layer 1: DuckDuckGo Real Image Search
+    success = fetch_ddg_image(search_query, img_filename)
 
+    # Layer 2: Cloudflare AI Fallback
     if not success: success = fetch_cloudflare_image(ai_prompt, img_filename)
+    
+    # Layer 3: Pexels Stock Fallback
     if not success: success = fetch_pexels_image(ai_prompt, img_filename)
+    
+    # Layer 4: Emergency Placeholder
     if not success: success = fetch_placeholder_image(search_query, img_filename)
 
     # ---> SANITIZE THE IMAGE BEFORE MOVIEPY SEES IT <---
