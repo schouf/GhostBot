@@ -144,7 +144,7 @@ def get_best_free_openrouter_model():
 
 # ================== PHASE 1: THE WRITER ==================
 def generate_viral_script(fallback_sota_model):
-    """Phase 1: Gemini strictly focuses on writing the script. Uses Global SOTA if Gemini fails."""
+    """Phase 1: Writer module purely focused on high-retention script structure and TTS emotional tags."""
     print("🧠 Phase 1: Generating Master Script (Writer)...")
     client = genai.Client(api_key=GEMINI_KEY)
     
@@ -237,7 +237,7 @@ Return ONLY valid JSON exactly matching this format:
 
 # ================== PHASE 3: THE CINEMATOGRAPHER ==================
 def generate_cinematographer_prompts(full_script_text, required_images, sota_model):
-    """Phase 3: The Global SOTA Brain analyzes the script and outputs perfectly paced visual prompts."""
+    """Phase 3: Exclusively focused on Production-Level Visual Directives for DDG and FLUX."""
     print(f"🎬 Phase 3: Directing {required_images} perfectly-paced visuals using SOTA Brain ({sota_model})...")
     
     json_template = '''
@@ -245,35 +245,35 @@ def generate_cinematographer_prompts(full_script_text, required_images, sota_mod
   "visuals": [
     {
       "search_query": "1977 Southern Television broadcast real photo",
-      "ai_prompt": "A glowing CRT television in a pitch black 1970s living room, eerie green glow, photorealistic, 8k, volumetric lighting, vertical composition"
+      "ai_prompt": "A glowing CRT television in a pitch black 1970s living room, glowing harsh static, eerie volumetric fog, cinematic 35mm photography, dark shadows, highly detailed, vertical composition"
     }
   ]
 }
 '''
 
     prompt = f"""
-You are an elite Cinematographer and Lead Visual Researcher for a True Crime / Mystery YouTube Shorts channel.
-Your job is to perfectly map sequential visuals to the following voiceover script.
+You are a Master Cinematographer and Archival Researcher for a True Crime / Mystery YouTube channel.
+Your ONLY task is to perfectly map sequential visual prompts to the voiceover script below.
 
 SCRIPT:
 "{full_script_text}"
 
 We need EXACTLY {required_images} visual transitions to pace the video perfectly. 
-For each scene, provide a real-world search query AND an AI-generation fallback.
+For each of the {required_images} scenes, you must provide:
 
-RULE 1: 'search_query' (Optimized for DuckDuckGo / Archives)
-- Must be highly specific, literal, and noun-heavy.
-- DO NOT use abstract adjectives like "creepy", "scary", or "mysterious". Search engines look for actual objects and places.
-- Include specific years, locations, or historical names when possible.
-- Good: "1948 Somerton beach police crime scene photo"
-- Bad: "Creepy man found dead on beach mystery"
+RULE 1: 'search_query' (For DuckDuckGo Image Search)
+- MUST be strictly 3 to 6 keywords. Search engines choke on long sentences.
+- Use explicit nouns, years, and historical locations.
+- PROHIBITED: Do not use adjectives like "creepy", "mysterious", or "scary".
+- Good Example: "Max Headroom WGN broadcast 1987"
+- Bad Example: "A creepy mysterious man in a mask on a TV"
 
-RULE 2: 'ai_prompt' (Optimized for FLUX.1 AI Generator)
-- Must be a highly detailed, Midjourney v6 style prompt.
-- Specify lighting (e.g., volumetric lighting, harsh shadows, eerie glow), camera angle, and atmosphere.
-- MUST include "vertical composition, centered framing" since this is for a 9:16 YouTube Short.
-- NEVER ask for text, words, documents with writing, or signs in the image (AI text generation looks like gibberish).
-- Good: "A vintage 1970s CRT television sitting on a wooden desk in a pitch black room, glowing with harsh static, eerie volumetric lighting, dark cinematic, true crime documentary style, 8k, vertical composition"
+RULE 2: 'ai_prompt' (For FLUX.1 High-End AI Generation)
+- Must be a Midjourney-level photorealistic prompt.
+- You MUST use this exact structural formula:
+  [Subject/Action] + [Setting/Background] + [Lighting] + [Camera Specs] + [vertical composition]
+- Required Camera Specs to include at the end of every prompt: "cinematic 35mm photography, 8k resolution, highly detailed, vertical composition"
+- PROHIBITED: NEVER ask for text, numbers, letters, documents with writing, or signs in the image. AI text looks like gibberish. Use "blank document" or "symbol" instead.
 
 Provide EXACTLY {required_images} items. Return ONLY valid JSON matching this format:
 {json_template}
@@ -296,7 +296,10 @@ Provide EXACTLY {required_images} items. Return ONLY valid JSON matching this fo
             
             while len(visuals) < required_images:
                 print("⚠️ Cinematographer array too short. Appending safety fallback.")
-                visuals.append({"search_query": "historical true crime evidence photo", "ai_prompt": "Dark cinematic mystery background, true crime documentary style, 8k, vertical composition"})
+                visuals.append({
+                    "search_query": "historical true crime evidence photo archive", 
+                    "ai_prompt": "Dark cinematic mystery background, true crime documentary style, volumetric lighting, 35mm photography, 8k resolution, highly detailed, vertical composition"
+                })
             
             return visuals[:required_images]
         else:
@@ -306,7 +309,10 @@ Provide EXACTLY {required_images} items. Return ONLY valid JSON matching this fo
         print(f"❌ Cinematographer execution error: {e}")
         
     print("🚨 Generating emergency visual prompts to prevent pipeline crash.")
-    return [{"search_query": "historical mystery evidence photo", "ai_prompt": "dark cinematic eerie background 8k, vertical composition"} for _ in range(required_images)]
+    return [{
+        "search_query": "historical mystery evidence photo archive", 
+        "ai_prompt": "dark cinematic eerie background, volumetric fog, 35mm photography, 8k resolution, vertical composition"
+    } for _ in range(required_images)]
 
 # ================== 4-LAYER TITANIUM PIPELINE ==================
 def fetch_ddg_image(prompt, filename):
@@ -315,7 +321,6 @@ def fetch_ddg_image(prompt, filename):
     try:
         from duckduckgo_search import DDGS
         with DDGS() as ddgs:
-            # Fetch top 3 results in case the first link is dead
             results = list(ddgs.images(prompt, max_results=3))
             for res in results:
                 img_url = res.get("image")
@@ -329,7 +334,7 @@ def fetch_ddg_image(prompt, filename):
                             print("✅ DuckDuckGo real historical image successfully downloaded!")
                             return True
                     except:
-                        continue # If this image link is dead, seamlessly try the next one
+                        continue 
     except ImportError:
         print("⚠️ duckduckgo-search package not installed. Add it to requirements.txt!")
     except Exception as e:
@@ -345,14 +350,13 @@ def fetch_cloudflare_image(prompt, filename):
         
     url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell"
     headers = {"Authorization": f"Bearer {CF_API_TOKEN}", "Content-Type": "application/json"}
-    payload = {"prompt": f"{prompt}, dark cinematic, vertical video format"}
+    payload = {"prompt": prompt}
     
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=45)
         if response.status_code == 200:
             content_type = response.headers.get("Content-Type", "")
             
-            # If Cloudflare sends the image wrapped inside JSON text
             if "application/json" in content_type:
                 data = response.json()
                 image_b64 = data.get("result", {}).get("image")
@@ -365,8 +369,6 @@ def fetch_cloudflare_image(prompt, filename):
                 else:
                     print(f"⚠️ Cloudflare JSON format unknown.")
                     return False
-            
-            # If Cloudflare sends the raw binary image directly
             else:
                 with open(filename, "wb") as f:
                     f.write(response.content)
@@ -406,7 +408,7 @@ def fetch_pexels_image(prompt, filename):
 def fetch_placeholder_image(keyword, filename):
     print(f"🚨 [4/4] EMERGENCY: Generating fallback placeholder image...")
     try:
-        from PIL import Image, ImageDraw
+        from PIL import Image
         img = Image.new('RGB', (VIDEO_WIDTH, VIDEO_HEIGHT), color=(20, 20, 30))
         img.save(filename, "JPEG")
         print("✅ Placeholder generated successfully.")
@@ -419,7 +421,7 @@ def verify_and_convert_image(filename):
     """Validates and converts incoming API images (PNG/WEBP) to strict RGB JPEGs for MoviePy."""
     try:
         with PIL.Image.open(filename) as img:
-            img.load() # Force load the image to check for corruption
+            img.load() 
             if img.mode in ('RGBA', 'P', 'LA', 'L'):
                 img = img.convert('RGB')
             img.save(filename, format='JPEG', quality=95)
@@ -433,19 +435,11 @@ def get_image_clip(search_query, ai_prompt, duration, index):
     img_filename = f"temp_img_{index}.jpg"
     success = False
     
-    # Layer 1: DuckDuckGo Real Image Search
     success = fetch_ddg_image(search_query, img_filename)
-
-    # Layer 2: Cloudflare AI Fallback
     if not success: success = fetch_cloudflare_image(ai_prompt, img_filename)
-    
-    # Layer 3: Pexels Stock Fallback
     if not success: success = fetch_pexels_image(ai_prompt, img_filename)
-    
-    # Layer 4: Emergency Placeholder
     if not success: success = fetch_placeholder_image(search_query, img_filename)
 
-    # ---> SANITIZE THE IMAGE BEFORE MOVIEPY SEES IT <---
     if not verify_and_convert_image(img_filename):
         print("🚨 Image corrupt or unreadable. Using emergency placeholder.")
         fetch_placeholder_image(search_query, img_filename)
@@ -455,7 +449,6 @@ def get_image_clip(search_query, ai_prompt, duration, index):
         if clip.w < VIDEO_WIDTH: clip = clip.resize(width=VIDEO_WIDTH)
         clip = clip.crop(x_center=clip.w/2, y_center=clip.h/2, width=VIDEO_WIDTH, height=VIDEO_HEIGHT)
         
-        # Apply gentle Ken Burns zoom effect
         zoom = (lambda t: 1 + 0.05 * (t / duration)) if index % 2 == 0 else (lambda t: 1.05 - 0.05 * (t / duration))
         clip = clip.resize(zoom).crop(x_center=VIDEO_WIDTH/2, y_center=VIDEO_HEIGHT/2, width=VIDEO_WIDTH, height=VIDEO_HEIGHT)
         return clip
