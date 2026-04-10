@@ -364,8 +364,13 @@ Provide EXACTLY {required_images} items. Return ONLY valid JSON matching this fo
     } for _ in range(required_images)]
 
 # ================== 4-LAYER TITANIUM PIPELINE ==================
+
 def fetch_ddg_image(prompt, filename):
     print(f"🔍 [1/4] DuckDuckGo Search: {prompt[:40]}...")
+    
+    # 🛑 ANTI-BOT BREATHING PAUSE: Sleep randomly for 2 to 4 seconds so DDG doesn't block us
+    time.sleep(random.uniform(2.0, 4.0))
+    
     try:
         from duckduckgo_search import DDGS
         with DDGS() as ddgs:
