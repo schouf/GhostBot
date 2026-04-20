@@ -180,29 +180,40 @@ def generate_viral_script(fallback_sota_models):
 '''
 
     prompt = f"""
-You are an elite viral YouTube Shorts writer and an Award-Winning Voice Director.
-Channel: "The Glitch Archive" (dark, eerie historical true crime/mysteries).
-CATEGORY: {niche}
+Tu es un scénariste français d'élite spécialisé YouTube Shorts et un Directeur Vocal primé.
+
+Chaîne: "The Glitch Archive" (mystères historiques sombres et véridiques, true crime).
+
+CATÉGORIE: {niche}
 
 MISSION:
-Write a highly engaging, high-retention script about a highly specific, obscure REAL case. 
-DO NOT invent a fake story. Use a strictly documented historical event, crime, or widely reported anomaly.
+
+Écris un script captivant en FRANÇAIS sur un cas RÉEL, obscur et documenté.
+
+NE PAS inventer. Utilise uniquement des événements historiques, crimes ou anomalies largement rapportés.
+
 {avoid_instruction}
 
-STRICT STORYTELLING RULES (FOR 100%+ RETENTION):
-1. THE HOOK (0-3s): The first sentence MUST drop a bizarre paradox, an impossible fact, or a terrifying anomaly.
-2. THE OPEN LOOP: In the second sentence, introduce a mystery or ask a compelling question, but delay the answer until the very end.
-3. THE PACING: The script must be exactly 130 to 160 words (roughly 45-55 seconds of spoken audio). Limit to 10 lines maximum.
-4. THE PERFECT LOOP: The final sentence must end abruptly on a cliffhanger that flows perfectly back into the first sentence.
+RÈGLES NARRATIVES STRICTES (POUR 100%+ DE RÉTENTION):
 
-EXPRESSION TAGS (SSML) FOR VOICE ACTING:
-You MUST use SSML tags inside `acting_text` to direct the AI voice.
-- Use <break time="1s"/> or <break time="1.5s"/> for terrifying, suspenseful pauses before big reveals.
-- Use <emphasis level="strong"> for shocking or violent words.
-- Use <prosody rate="slow" pitch="-15%"> [creepy text here] </prosody> when explaining dark, creeping details.
+1. LE HOOK (0-3s): La première phrase DOIT poser un paradoxe bizarre, un fait impossible ou une anomalie terrifiante.
 
-Return ONLY valid JSON exactly matching this format:
+2. LA BOUCLE OUVERTE: La deuxième phrase introduit un mystère ou une question, mais retarde la réponse jusqu'à la fin.
+
+3. LE RYTHME: Le script doit faire exactement 130 à 160 mots (environ 45-55 secondes audio). Maximum 10 lignes.
+
+4. LA BOUCLE PARFAITE: La dernière phrase doit se terminer en cliffhanger qui revient naturellement à la première phrase.
+
+TAGS SSML POUR LE JEU VOCAL:
+
+- <break time="1s"/> ou <break time="1.5s"/> pour les pauses terrifiantes avant les grandes révélations.
+- <emphasis level="strong"> pour les mots choquants ou violents.
+- <prosody rate="slow" pitch="-15%"> [texte glauque] </prosody> pour les détails sombres et rampants.
+
+Retourne UNIQUEMENT du JSON valide correspondant exactement à ce format:
+
 {json_template}
+
 """
     
     config = types.GenerateContentConfig(temperature=0.9, top_p=0.95, response_mime_type="application/json")
@@ -526,7 +537,7 @@ def generate_youtube_metadata(full_script_text, sota_models):
     print("📈 Phase 5: Marketer - Generating YouTube SEO Chain...")
     sys_prompt = "You are an elite YouTube Shorts SEO Strategist. You ONLY output the exact data requested."
     
-    t_prompt = f"Read this script and write ONE click-oriented YouTube Shorts title (under 60 characters). No quotes/hashtags.\nScript: {full_script_text}"
+    t_prompt = f"Read this script and write ONE click-oriented YouTube Shorts title in french (under 60 characters). No quotes/hashtags.\nScript: {full_script_text}"
     title = ask_llm(sys_prompt, t_prompt, sota_models).strip('"').replace("'", "")
     if not title or len(title) > 80: title = "They found WHAT?"
     
