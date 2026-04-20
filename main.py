@@ -448,9 +448,9 @@ def get_image_clip(search_query, ai_prompt, duration, index):
     img_filename = f"temp_img_{index}.jpg"
     success = False
     
-    success = fetch_archive_image(search_query, img_filename)
+    success = fetch_pexels_image(search_query, img_filename)
     if not success: success = fetch_cloudflare_image(ai_prompt, img_filename)
-    if not success: success = fetch_pexels_image(ai_prompt, img_filename)
+    if not success: success = fetch_archive_image(search_query, img_filename)
     if not success: success = fetch_placeholder_image(search_query, img_filename)
 
     if not verify_and_convert_image(img_filename):
